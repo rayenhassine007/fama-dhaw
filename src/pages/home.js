@@ -8,8 +8,8 @@
 // Le verrou reste entier : les boutons de signalement n'apparaissent que dans SA
 // PROPRE zone GPS. Les autres zones sont consultables, jamais votables (§8).
 
-import { getBestPosition, GeolocError } from '../lib/geoloc.js';
-import { zoneForPoint, zonesNear, candidateRadiusKm, distanceKm } from '../lib/zones.js';
+import { getBestPosition, GeolocError, ACCURACY_GOOD } from '../lib/geoloc.js';
+import { zoneForPoint, acceptableZones, isAmbiguous, distanceKm } from '../lib/zones.js';
 import { ZONES } from '../data/zones.js';
 import { getDeviceId } from '../lib/device.js';
 import { fetchAllStates, subscribeStates } from '../lib/cellstate.js';
@@ -317,15 +317,17 @@ function drawMyZone() {
     </div>
     ${
       isGps
-        ? `<p class="help-text"><a href="#" id="relocate" class="link">↻ Refaire ma localisation</a></p>`
+        ? `<p class="help-text" style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap">
+             <a href="#" id="relocate" class="link">↻ Refaire ma localisation</a>
+             <a href="#" id="wrong-zone" class="link">✏️ Ce n'est pas ma zone</a>
+           </p>`
         : ''
     }
   `;
 }
 
 function renderConfirmFix(fix) {
-  const radius = candidateRadiusKm(fix.accuracy);
-  const options = zonesNear(fix.lat, fix.lng, radius)
+  const options = acceptableZones(fix.lat, fix.lng, fix.accuracy)
     .slice(0, MAX_CANDIDATES)
     .map((z) => {
       const d = distanceKm(fix.lat, fix.lng, z.lat, z.lng);
@@ -336,20 +338,29 @@ function renderConfirmFix(fix) {
     })
     .join('');
 
+  // Deux causes très différentes, deux messages. Dire « ton GPS est imprécis »
+  // à quelqu'un dont le point est parfait est faux et déroutant : c'est nous qui
+  // ne savons pas placer la frontière.
+  const gpsFlou = fix.accuracy > ACCURACY_GOOD;
   const km = (fix.accuracy / 1000).toFixed(1);
+  const explication = gpsFlou
+    ? `Ton téléphone te situe à <strong>± ${
+        fix.accuracy >= 1000 ? `${km} km` : `${fix.accuracy} m`
+      }</strong> près — pas assez précis pour trancher tout seul.`
+    : `Ta position est bonne, mais plusieurs zones sont à distance quasi égale d'ici.
+       Nos repères de zones sont approximatifs, donc on préfère te demander plutôt
+       que de deviner.`;
+
   return `
     <div class="status-card state-unknown" style="text-align:left">
       <div class="big-status" style="font-size:20px">Confirme ta zone</div>
       <div class="status-sub">
-        Ton téléphone te situe à <strong>± ${
-          fix.accuracy >= 1000 ? `${km} km` : `${fix.accuracy} m`
-        }</strong> près — pas assez précis pour trancher tout seul.
-        Choisis ta zone parmi celles où tu peux être :
+        ${explication} Choisis la tienne :
       </div>
       <div class="confirm-options">${options}</div>
       <p class="help-text" style="text-align:left">
-        On ne propose que les zones dans ton rayon GPS — et le serveur revérifie.
-        Tu ne peux pas signaler ailleurs que chez toi.
+        On ne propose que les zones autour de ta position réelle — et le serveur
+        revérifie. Tu ne peux pas signaler ailleurs que chez toi.
       </p>
       <p class="help-text" style="text-align:left">
         <a href="#" id="retry-locate" class="link">↻ Réessayer le GPS</a> ·
@@ -399,6 +410,19 @@ function onMyZoneClick(e) {
   if (e.target.closest('#relocate')) {
     e.preventDefault();
     doLocate();
+    return;
+  }
+  // Correction manuelle : le GPS est bon mais notre centroïde est mal placé.
+  // On rouvre le choix sur la position DÉJÀ mesurée — pas besoin de relocaliser,
+  // et le serveur revérifie de toute façon que la zone choisie est atteignable.
+  if (e.target.closest('#wrong-zone')) {
+    e.preventDefault();
+    if (anchor && anchor.mode === 'gps' && typeof anchor.lat === 'number') {
+      pendingFix = { lat: anchor.lat, lng: anchor.lng, accuracy: anchor.accuracy, quality: 'ask' };
+      drawMyZone();
+    } else {
+      doLocate();
+    }
   }
 }
 
@@ -605,8 +629,11 @@ async function doLocate() {
       },
     });
 
-    // Point net : on ancre directement, sans embêter l'utilisateur.
-    if (fix.quality === 'good') {
+    // Point net ET zone franche : on ancre directement.
+    // Si deux centroïdes sont quasi équidistants, un point même parfait ne
+    // départage rien — nos centroïdes sont approximatifs, la frontière peut
+    // tomber en plein milieu d'une ville. Dans ce cas on demande.
+    if (fix.quality === 'good' && !isAmbiguous(fix.lat, fix.lng)) {
       const zone = zoneForPoint(fix.lat, fix.lng);
       if (!zone) {
         showFixError("Tu sembles hors de la couverture. Cherche ta zone dans la liste.");
@@ -629,7 +656,7 @@ async function doLocate() {
     }
 
     // Point flou : on demande à l'humain de trancher plutôt que de refuser.
-    const candidates = zonesNear(fix.lat, fix.lng, candidateRadiusKm(fix.accuracy));
+    const candidates = acceptableZones(fix.lat, fix.lng, fix.accuracy);
     if (candidates.length === 0) {
       showFixError("Tu sembles hors de la couverture. Cherche ta zone dans la liste.");
       return;
@@ -686,7 +713,7 @@ async function vote(state) {
     // Point trop vieux : on relocalise, le serveur re-dérive la zone du GPS.
     if (Date.now() - anchor.ts > POSITION_FRESH_MS) {
       const fix = await getBestPosition();
-      const near = zonesNear(fix.lat, fix.lng, candidateRadiusKm(fix.accuracy));
+      const near = acceptableZones(fix.lat, fix.lng, fix.accuracy);
       if (!near.some((z) => z.id === zoneId)) {
         const z = zoneForPoint(fix.lat, fix.lng);
         showToast('Tu as changé de zone. On remet ta position à jour.');

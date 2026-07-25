@@ -3,8 +3,9 @@
 // the server re-derives it on every vote — spec §8).
 export {
   zoneForPoint,
-  zonesNear,
-  candidateRadiusKm,
+  acceptableZones,
+  nearestZones,
+  isAmbiguous,
   distanceKm,
   COVERAGE_MAX_KM,
 } from '../../shared/zones.js';

@@ -8,13 +8,13 @@
 
 import { USE_API, apiPost } from './api.js';
 import { devAddVote } from './devstore.js';
-import { zoneForPoint, zonesNear, candidateRadiusKm } from './zones.js';
+import { zoneForPoint, acceptableZones } from './zones.js';
 
 // state: 'up' (y a du courant) | 'down' (coupé)
 export async function submitReport({ state, lat, lng, accuracy, zoneId, deviceId, turnstileToken }) {
   if (!USE_API) {
     // Mode démo : on rejoue localement la même règle que le serveur.
-    const candidates = zonesNear(lat, lng, candidateRadiusKm(accuracy));
+    const candidates = acceptableZones(lat, lng, accuracy);
     const zone = zoneId ? candidates.find((z) => z.id === zoneId) : zoneForPoint(lat, lng);
     if (!zone) throw new Error('Cette zone est trop loin de ta position.');
     devAddVote({ zoneId: zone.id, state, deviceId });

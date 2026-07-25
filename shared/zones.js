@@ -457,34 +457,37 @@ export function zoneForPoint(lat, lng) {
   return best;
 }
 
-// Rayon de candidature (km) pour une précision GPS donnée (mètres).
-//
-// Un point à ± 3 km dans Tunis intra-muros tombe sur un centroïde quasi au
-// hasard parmi des dizaines : prétendre connaître LA zone serait malhonnête
-// (§2.6). On expose donc toutes les zones physiquement plausibles et on laisse
-// l'humain trancher — mais uniquement dans SON rayon d'incertitude.
-//
-// Ce rayon sert AUSSI de contrôle serveur : c'est lui qui borne les zones qu'un
-// appareil a le droit de faire bouger. Il colle donc à l'incertitude réelle du
-// GPS, sans plancher généreux — sinon un point précis ouvrirait quand même le
-// vote sur tout le voisinage. Le petit plancher (300 m) absorbe seulement
-// l'imprécision de NOS centroïdes, qui sont approximatifs. Quand rien ne tombe
-// dans le rayon (zones rurales espacées), zonesNear() renvoie de toute façon la
-// plus proche, donc le cas « je suis loin de tout » reste couvert.
-const CANDIDATE_FLOOR_KM = 0.3;
+// Nos centroïdes sont APPROXIMATIFS (voir l'en-tête). Une erreur de placement de
+// 2–3 km suffit à faire passer la frontière de Voronoï en plein milieu d'une
+// ville : quelqu'un à Oudhref se retrouve assigné à Métouia sans que son GPS ait
+// le moindre défaut. Le rayon d'acceptation doit donc tolérer NOTRE imprécision,
+// pas seulement celle du GPS.
+const CENTROID_TOLERANCE_KM = 2.5;
+// Plafond dur : au-delà, « tolérer notre imprécision » deviendrait « voter où on
+// veut ». C'est lui qui garde le verrou du §8 utile.
+const MAX_ACCEPTABLE = 8;
 
-export function candidateRadiusKm(accuracyMeters) {
-  const acc = Number(accuracyMeters);
-  if (!Number.isFinite(acc) || acc <= 0) return CANDIDATE_FLOOR_KM;
-  return Math.min(15, Math.max(CANDIDATE_FLOOR_KM, acc / 1000));
+/** Les `n` zones dont le centre est le plus proche du point, les plus proches d'abord. */
+export function nearestZones(lat, lng, n = 1) {
+  const scored = [];
+  for (const z of ZONES) {
+    const d = distanceKm(lat, lng, z.lat, z.lng);
+    if (d <= COVERAGE_MAX_KM) scored.push({ zone: z, d });
+  }
+  scored.sort((a, b) => a.d - b.d);
+  return scored.slice(0, n).map((s) => s.zone);
 }
 
 /**
- * Zones dont le centre est à moins de `radiusKm` du point, les plus proches
- * d'abord. Toujours au moins la plus proche (si dans la couverture), pour que
- * l'appelant ait systématiquement un candidat.
+ * Les zones qu'un appareil situé ici a le droit de faire bouger — et donc aussi
+ * celles qu'on propose quand il faut trancher à la main.
+ *
+ * Calculé à l'IDENTIQUE côté client et côté serveur : le serveur re-dérive
+ * toujours cette liste depuis le GPS reçu et n'accepte un `zone_id` que s'il en
+ * fait partie (§8). On ne peut donc jamais signaler dans un quartier où l'on
+ * n'est pas, seulement lever une ambiguïté autour de sa propre position.
  */
-export function zonesNear(lat, lng, radiusKm) {
+export function acceptableZones(lat, lng, accuracyMeters) {
   const scored = [];
   for (const z of ZONES) {
     const d = distanceKm(lat, lng, z.lat, z.lng);
@@ -492,6 +495,26 @@ export function zonesNear(lat, lng, radiusKm) {
   }
   if (scored.length === 0) return [];
   scored.sort((a, b) => a.d - b.d);
-  const within = scored.filter((s) => s.d <= radiusKm);
-  return (within.length > 0 ? within : [scored[0]]).map((s) => s.zone);
+
+  const acc = Number(accuracyMeters);
+  const accKm = Number.isFinite(acc) && acc > 0 ? acc / 1000 : 0;
+  // On part de la distance à la zone la plus proche : en zone rurale les
+  // centroïdes sont très espacés, un rayon fixe n'aurait aucun sens.
+  const radius = Math.max(accKm, scored[0].d + CENTROID_TOLERANCE_KM);
+
+  return scored
+    .filter((s) => s.d <= radius)
+    .slice(0, MAX_ACCEPTABLE)
+    .map((s) => s.zone);
+}
+
+/** Deux zones quasi équidistantes = le plus proche centroïde ne prouve rien. */
+export function isAmbiguous(lat, lng) {
+  const [a, b] = nearestZones(lat, lng, 2);
+  if (!a || !b) return false;
+  const da = distanceKm(lat, lng, a.lat, a.lng);
+  const db = distanceKm(lat, lng, b.lat, b.lng);
+  // Écart de moins de 40 % : vu l'imprécision de nos centroïdes, départager
+  // serait un coup de dés. Mieux vaut demander.
+  return db < da * 1.4;
 }

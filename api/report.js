@@ -4,7 +4,7 @@
 // GPS server-side (never trusted from the client), Turnstile is verified, the
 // IP is hashed, rate limits apply, and the aggregated state is recomputed.
 import { sql } from './_db.js';
-import { zonesNear, candidateRadiusKm } from '../shared/zones.js';
+import { acceptableZones } from '../shared/zones.js';
 import { readBody, getClientIp, hashIp, verifyTurnstile, recomputeState } from './_helpers.js';
 
 // Précision au-delà de laquelle on refuse : même avec confirmation humaine, un
@@ -43,7 +43,7 @@ export default async function handler(req, res) {
   // laquelle de SES zones plausibles est la bonne : on ne retient son choix que
   // s'il tombe dans le rayon d'incertitude de son propre GPS. Impossible donc de
   // voter pour un quartier où l'on ne se trouve pas.
-  const candidates = zonesNear(lat, lng, candidateRadiusKm(accuracy));
+  const candidates = acceptableZones(lat, lng, accuracy);
   if (candidates.length === 0)
     return res.status(400).json({ error: 'Hors de la zone de couverture' });
 
