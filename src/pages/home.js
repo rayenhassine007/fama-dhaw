@@ -36,6 +36,12 @@ let expandedGovs = new Set(); // gouvernorats dépliés
 let pendingFix = null; // point GPS flou en attente de confirmation humaine
 let unsubscribe = null;
 
+// La liste est redessinée toutes les 20 s par le polling. Sans ce garde-fou,
+// l'animation d'ouverture se rejouerait à chaque rafraîchissement et la page
+// clignoterait. On n'anime donc que ce que l'utilisateur vient d'ouvrir.
+let animateOpen = false;
+let animClass = '';
+
 // Déplie le gouvernorat d'une zone (appelé quand on ancre l'utilisateur, pour
 // qu'il voie tout de suite son quartier au lieu d'une liste fermée).
 function expandGovOf(zoneId) {
@@ -338,9 +344,9 @@ function zoneRow(zone) {
           ${metaLine(st)}
         </span>
         ${statusPill(st)}
-        <span class="chev">${open ? '⌄' : '›'}</span>
+        <span class="chev">›</span>
       </button>
-      ${open ? `<div class="zone-body">${zoneBody(zone, st, isMine)}</div>` : ''}
+      ${open ? `<div class="zone-body${animClass}">${zoneBody(zone, st, isMine)}</div>` : ''}
     </div>`;
 }
 
@@ -388,6 +394,9 @@ function drawList() {
   const box = root.querySelector('#zone-list');
   if (!box) return;
 
+  animClass = animateOpen ? ' anim' : '';
+  animateOpen = false;
+
   const q = normalizeText(query);
   const searching = q.length > 0;
   const visible = searching ? ZONES.filter((z) => normalizeText(z.name).includes(q)) : ZONES;
@@ -412,7 +421,7 @@ function drawList() {
 
     html += `<button class="gov-header${open ? ' open' : ''}" data-gov="${escapeHtml(gov)}"
                      aria-expanded="${open}">
-        <span class="gov-chev">${open ? '⌄' : '›'}</span>
+        <span class="gov-chev">›</span>
         <span class="gov-name">${escapeHtml(gov)}${
       hasMine ? ' <span class="chip-mine">ta zone</span>' : ''
     }</span>
@@ -425,7 +434,7 @@ function drawList() {
       </button>`;
 
     // Un gouvernorat fermé ne rend aucune ligne : la page reste légère (§2.5).
-    if (open) html += `<div class="gov-zones">${inGov.map(zoneRow).join('')}</div>`;
+    if (open) html += `<div class="gov-zones${animClass}">${inGov.map(zoneRow).join('')}</div>`;
   }
   box.innerHTML = html;
 }
@@ -458,7 +467,10 @@ function onListClick(e) {
   if (gov) {
     const name = gov.dataset.gov;
     if (expandedGovs.has(name)) expandedGovs.delete(name);
-    else expandedGovs.add(name);
+    else {
+      expandedGovs.add(name);
+      animateOpen = true;
+    }
     drawList();
     return;
   }
@@ -466,6 +478,7 @@ function onListClick(e) {
   const head = e.target.closest('[data-toggle]');
   if (head) {
     const id = head.dataset.toggle;
+    animateOpen = expandedId !== id;
     expandedId = expandedId === id ? null : id;
     drawList();
   }
