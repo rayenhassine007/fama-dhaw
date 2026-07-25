@@ -22,7 +22,9 @@ const ANCHOR_KEY = 'dhaw_anchor';
 const LASTVOTE_KEY = 'dhaw_last_vote';
 const POSITION_FRESH_MS = 20 * 60 * 1000; // on re-localise avant de voter si plus vieux
 const VOTE_COOLDOWN_MS = 10 * 60 * 1000; // 1 vote / appareil / 10 min (§7.6)
-const MAX_CANDIDATES = 12; // zones proposées quand le GPS est flou
+// Aligné sur MAX_ACCEPTABLE de shared/zones.js : on doit pouvoir choisir tout ce
+// que le serveur accepterait, sinon la bonne zone reste hors d'atteinte.
+const MAX_CANDIDATES = 16;
 
 // Gouvernorats dans l'ordre où ils apparaissent dans ZONES (déjà groupé).
 const GOVS = [...new Set(ZONES.map((z) => z.gov))];

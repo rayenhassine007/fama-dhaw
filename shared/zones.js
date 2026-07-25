@@ -462,10 +462,25 @@ export function zoneForPoint(lat, lng) {
 // ville : quelqu'un à Oudhref se retrouve assigné à Métouia sans que son GPS ait
 // le moindre défaut. Le rayon d'acceptation doit donc tolérer NOTRE imprécision,
 // pas seulement celle du GPS.
-const CENTROID_TOLERANCE_KM = 2.5;
+// La tolérance sur NOS centroïdes s'adapte à la densité locale, mesurée par la
+// distance à la zone la plus proche. Une tolérance fixe était mauvaise des deux
+// côtés : trop serrée en zone rurale (Oudhref sortait de la liste alors que
+// l'utilisateur y était), trop large dans Tunis dense où elle ouvrait le vote
+// sur une vingtaine de quartiers. Un repère de quartier tunisois est fiable à
+// quelques centaines de mètres ; un repère de village l'est à quelques km.
+const TOLERANCE_FACTOR = 1.2;
+const TOLERANCE_MIN_KM = 0.4;
+const TOLERANCE_MAX_KM = 3.5;
 // Plafond dur : au-delà, « tolérer notre imprécision » deviendrait « voter où on
 // veut ». C'est lui qui garde le verrou du §8 utile.
-const MAX_ACCEPTABLE = 8;
+const MAX_ACCEPTABLE = 16;
+// On propose TOUJOURS au moins ce nombre de zones proches. Sans ce plancher, un
+// point imprécis qui dérive de quelques kilomètres n'offrait qu'un seul choix —
+// et forcément le mauvais, puisque c'est justement la dérive qui l'avait élu.
+const MIN_CANDIDATES = 3;
+// Au-delà, on n'est plus dans « lever une ambiguïté » mais dans « choisir au
+// hasard sur la carte ».
+const HARD_CAP_KM = 25;
 
 /** Les `n` zones dont le centre est le plus proche du point, les plus proches d'abord. */
 export function nearestZones(lat, lng, n = 1) {
@@ -498,14 +513,28 @@ export function acceptableZones(lat, lng, accuracyMeters) {
 
   const acc = Number(accuracyMeters);
   const accKm = Number.isFinite(acc) && acc > 0 ? acc / 1000 : 0;
-  // On part de la distance à la zone la plus proche : en zone rurale les
-  // centroïdes sont très espacés, un rayon fixe n'aurait aucun sens.
-  const radius = Math.max(accKm, scored[0].d + CENTROID_TOLERANCE_KM);
 
-  return scored
-    .filter((s) => s.d <= radius)
-    .slice(0, MAX_ACCEPTABLE)
-    .map((s) => s.zone);
+  // Budget d'incertitude, cumulé — les erreurs s'additionnent, elles ne se
+  // remplacent pas :
+  //   scored[0].d  la zone la plus proche peut déjà être loin (zones rurales),
+  //   accKm        la vraie position peut être à `accuracy` du point mesuré,
+  //   tolerance    et notre centroïde lui-même est approximatif.
+  const tolerance = Math.min(
+    TOLERANCE_MAX_KM,
+    Math.max(TOLERANCE_MIN_KM, scored[0].d * TOLERANCE_FACTOR)
+  );
+  const radius = scored[0].d + accKm + tolerance;
+
+  const within = scored.filter((s) => s.d <= radius);
+
+  // Plancher : même si le rayon ne couvre qu'une zone, on en propose plusieurs.
+  // Un choix unique n'est pas un choix, et c'est précisément dans ce cas que la
+  // zone élue est la moins fiable.
+  const list = within.length >= MIN_CANDIDATES
+    ? within
+    : scored.filter((s) => s.d <= HARD_CAP_KM).slice(0, MIN_CANDIDATES);
+
+  return list.slice(0, MAX_ACCEPTABLE).map((s) => s.zone);
 }
 
 /** Deux zones quasi équidistantes = le plus proche centroïde ne prouve rien. */
