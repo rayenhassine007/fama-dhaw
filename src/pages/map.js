@@ -13,6 +13,7 @@
 import { ZONES } from '../data/zones.js';
 import { TUNISIA_RINGS } from '../data/tunisia.js';
 import { escapeHtml, timeAgo } from '../lib/ui.js';
+import { fetchHistory, renderHistoryBar } from '../lib/history.js';
 
 // Cadrage géographique, avec une marge autour du pays.
 const BBOX = { minLng: 7.3, maxLng: 11.8, minLat: 30.0, maxLat: 37.6 };
@@ -275,9 +276,13 @@ function bindGestures() {
       const [px, py] = toViewBox(e);
       const dx = px - start.px;
       const dy = py - start.py;
-      if (Math.abs(dx) + Math.abs(dy) > 4) start.moved = true;
-      view.x = start.vx + dx * view.scale;
-      view.y = start.vy + dy * view.scale;
+      if (Math.abs(dx) + Math.abs(dy) > 4 * unitsPerPx) start.moved = true;
+      // La carte doit suivre le doigt exactement. `dx` est déjà exprimé dans le
+      // repère parent (celui de la translation), donc on l'ajoute tel quel :
+      // le multiplier par l'échelle rendait le déplacement `scale` fois trop
+      // rapide — insupportable dès qu'on avait zoomé.
+      view.x = start.vx + dx;
+      view.y = start.vy + dy;
       clamp();
       applyView();
     }
@@ -376,5 +381,28 @@ function drawInfo() {
                ${s.confirmed ? 'confirmé' : 'non confirmé'} · confiance ${s.confidence}%</div>`
           : `<div class="map-card-meta">Personne n'a signalé cette zone récemment.</div>`
       }
+      <div class="hist-block" data-hist-for="${z.id}">
+        <button class="btn-hist" data-hist="${z.id}">🕒 Voir l'historique (24 h)</button>
+      </div>
     </div>`;
+
+  const btn = box.querySelector('[data-hist]');
+  if (btn) btn.addEventListener('click', () => loadHistory(z.id));
+}
+
+// Historique de la zone sélectionnée, chargé à la demande et gardé en mémoire.
+const histCache = new Map();
+
+async function loadHistory(zoneId) {
+  const box = root && root.querySelector(`[data-hist-for="${zoneId}"]`);
+  if (!box) return;
+  if (histCache.has(zoneId)) {
+    box.innerHTML = renderHistoryBar(histCache.get(zoneId));
+    return;
+  }
+  box.innerHTML = `<div class="hist-empty">Chargement de l'historique…</div>`;
+  const data = await fetchHistory(zoneId, 24);
+  histCache.set(zoneId, data);
+  const still = root && root.querySelector(`[data-hist-for="${zoneId}"]`);
+  if (still) still.innerHTML = renderHistoryBar(data);
 }

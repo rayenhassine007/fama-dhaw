@@ -42,6 +42,23 @@ Une pastille par zone, colorée : 🔴 coupé · 🟢 courant · 🟡 par endroi
 > la frontière calculée entre Oudhref et Métouia passe en plein milieu
 > d'Oudhref. Une pastille ne prétend rien d'autre que « par ici ».
 
+### Historique par zone (§6.2)
+
+Bouton **« 🕒 Voir l'historique (24 h) »** dans le détail d'une zone, sur la liste
+comme sur la carte. Une barre façon page de statut, un segment par 15 min :
+rouge sans lumière, vert avec, jaune par endroits, gris quand personne n'a
+signalé.
+
+Rien n'avait été prévu pour ça et pourtant tout était là : la table `votes`
+n'est **jamais purgée** — seule la fenêtre glissante décide de ce qui compte pour
+l'état *courant*. `GET /api/history?zone=…&hours=24` reconstitue donc chaque
+créneau avec la **même** fenêtre de 45 min et la **même** règle d'agrégation : la
+barre montre exactement ce que l'app aurait affiché à ce moment-là.
+
+Les trous ne sont pas comblés. Une zone dont personne n'a parlé reste grise, et
+le résumé le dit — « 4 h 15 sans lumière · 34 % de la période documentée » — au
+lieu d'annoncer « 0 % de coupure » pour une zone qu'on n'a simplement pas vue.
+
 ### Deux façons de fixer sa zone : le GPS, ou le choix à la main
 
 - **« 📍 Trouver ma zone »** (GPS) — la seule qui débloque le signalement, parce

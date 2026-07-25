@@ -86,6 +86,39 @@ export function devZoneState(zoneId) {
   };
 }
 
+// Historique local, calculé exactement comme api/history.js : même fenêtre
+// glissante, même règle d'agrégation, mêmes créneaux.
+export function devZoneHistory(zoneId, hours = 24) {
+  const BUCKET_MIN = 15;
+  const bucketMs = BUCKET_MIN * 60000;
+  const now = Date.now();
+  const start = Math.floor((now - hours * 3600000) / bucketMs) * bucketMs;
+  const votes = load().filter((v) => v.zoneId === zoneId);
+
+  const points = [];
+  for (let t = start; t <= now; t += bucketMs) {
+    const seen = new Map();
+    for (const v of votes) {
+      if (v.ts > t || v.ts <= t - WINDOW_MS) continue;
+      const prev = seen.get(v.deviceId);
+      if (!prev || v.ts > prev.ts) seen.set(v.deviceId, v);
+    }
+    const latest = [...seen.values()];
+    const n = (s) => latest.filter((v) => v.state === s).length;
+    // Tout vient du même navigateur : une seule connexion (cf. devZoneState).
+    const agg = latest.length
+      ? aggregate({ devices: n('down'), ips: n('down') ? 1 : 0 }, { devices: n('up'), ips: n('up') ? 1 : 0 })
+      : null;
+    points.push({
+      t: new Date(t).toISOString(),
+      state: agg ? agg.state : 'unknown',
+      n_down: agg ? agg.nDown : 0,
+      n_up: agg ? agg.nUp : 0,
+    });
+  }
+  return { zone_id: zoneId, bucket_min: BUCKET_MIN, hours, points };
+}
+
 export function devAllStates() {
   const now = Date.now();
   const votes = fresh(load(), now);

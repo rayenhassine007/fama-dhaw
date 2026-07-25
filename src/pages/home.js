@@ -17,6 +17,7 @@ import { submitReport } from '../lib/report.js';
 import { submitZoneSuggestion } from '../lib/suggestZone.js';
 import { getTurnstileToken } from '../lib/turnstile.js';
 import { showToast, timeAgo, escapeHtml, normalizeText } from '../lib/ui.js';
+import { fetchHistory, renderHistoryBar } from '../lib/history.js';
 
 const ANCHOR_KEY = 'dhaw_anchor';
 const LASTVOTE_KEY = 'dhaw_last_vote';
@@ -520,7 +521,31 @@ function zoneBody(zone, st, isMine) {
         reste réservé à ta zone GPS — sinon n'importe qui pourrait voter n'importe où.</div>`;
   }
 
-  return detail + action;
+  const hist = `
+    <div class="hist-block" data-hist-for="${zone.id}">
+      <button class="btn-hist" data-hist="${zone.id}">🕒 Voir l'historique (24 h)</button>
+    </div>`;
+
+  return detail + action + hist;
+}
+
+// Charge et affiche la barre d'historique d'une zone. Les données restent en
+// mémoire : rouvrir la zone ne relance pas de requête.
+const histCache = new Map();
+
+async function loadHistory(zoneId) {
+  const box = root.querySelector(`[data-hist-for="${zoneId}"]`);
+  if (!box) return;
+
+  if (histCache.has(zoneId)) {
+    box.innerHTML = renderHistoryBar(histCache.get(zoneId));
+    return;
+  }
+  box.innerHTML = `<div class="hist-empty">Chargement de l'historique…</div>`;
+  const data = await fetchHistory(zoneId, 24);
+  histCache.set(zoneId, data);
+  const still = root.querySelector(`[data-hist-for="${zoneId}"]`);
+  if (still) still.innerHTML = renderHistoryBar(data);
 }
 
 function drawList() {
@@ -592,6 +617,13 @@ function onListClick(e) {
   // « Activer le GPS » depuis la ligne de sa propre zone.
   if (e.target.closest('[data-locate]')) {
     doLocate();
+    return;
+  }
+
+  // Historique : chargé seulement quand on le demande, jamais avec la liste.
+  const hb = e.target.closest('[data-hist]');
+  if (hb) {
+    loadHistory(hb.dataset.hist);
     return;
   }
 
