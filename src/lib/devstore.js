@@ -71,6 +71,8 @@ export function devZoneState(zoneId) {
     confidence,
     n_reports: winning.length,
     n_distinct: distinct,
+    n_down: down.length,
+    n_up: up.length,
     confirmed: distinct >= N_CONFIRM,
     updated_at: new Date(lastTs).toISOString(),
   };

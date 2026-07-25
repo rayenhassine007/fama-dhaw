@@ -1,61 +1,120 @@
-// Geolocation with a strict accuracy filter (spec §5).
+// Géolocalisation, calibrée pour de vrais téléphones (spec §5, assoupli après
+// test terrain).
 //
-// We only need ONE good reading to anchor the user to a zone, so we can afford
-// to be picky and throw away imprecise fixes rather than place someone in the
-// wrong zone.
+// L'ancienne approche — un seul getCurrentPosition() puis rejet de tout ce qui
+// dépasse 1 km — échouait en pratique : sur Android comme sur iOS, le PREMIER
+// point renvoyé est presque toujours l'estimation wifi/antenne (1–3 km), et la
+// puce GPS n'affine qu'au bout de quelques secondes. Résultat : l'utilisateur
+// accordait la permission et lisait quand même « position trop imprécise ».
 //
-// IMPORTANT: never call this on page load — always after an explicit tap, with
-// an explanation shown first, or the refusal rate explodes.
+// Donc maintenant : on SURVEILLE la position pendant quelques secondes et on
+// garde le meilleur point. Et on ne rejette jamais sèchement — on renvoie ce
+// qu'on a avec un niveau de qualité, et c'est l'interface qui demande à l'humain
+// de confirmer quand c'est flou. Un humain qui confirme « oui, c'est mon
+// quartier » est un meilleur signal qu'un refus froid.
 
-// Accuracy radius (metres) above which we refuse the reading and fall back to
-// manual zone selection. With fixed named zones, a fix looser than this can
-// easily land in the wrong délégation.
-export const ACCURACY_MAX_METERS = 1000;
+// Seuils de précision (rayon en mètres).
+export const ACCURACY_GOOD = 500; // on ancre directement, sans rien demander
+export const ACCURACY_ASK = 2000; // on ancre mais on fait confirmer la zone
+// Au-delà de ACCURACY_ASK : on renvoie quand même le point, marqué 'poor', et
+// l'utilisateur choisit sa zone parmi les candidates plausibles.
+
+const WATCH_MS = 12000; // durée max d'attente d'un meilleur point
+const GOOD_ENOUGH = 120; // m — on arrête tout de suite, c'est un vrai point GPS
 
 export class GeolocError extends Error {
   constructor(code, message) {
     super(message);
     this.name = 'GeolocError';
-    this.code = code; // 'unsupported' | 'denied' | 'unavailable' | 'timeout' | 'imprecise'
+    this.code = code; // 'unsupported' | 'denied' | 'unavailable'
   }
 }
 
-export function getPosition() {
+function toResult(pos) {
+  const accuracy = Math.round(pos.coords.accuracy ?? 99999);
+  let quality = 'poor';
+  if (accuracy <= ACCURACY_GOOD) quality = 'good';
+  else if (accuracy <= ACCURACY_ASK) quality = 'ask';
+  return { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy, quality };
+}
+
+/**
+ * Surveille la position quelques secondes et renvoie le MEILLEUR point obtenu.
+ *
+ * Ne rejette que dans trois cas : navigateur sans géoloc, permission refusée,
+ * ou aucun point du tout. Une précision médiocre n'est PAS une erreur : elle
+ * revient dans `quality` ('good' | 'ask' | 'poor') pour que l'appelant décide.
+ *
+ * @param {object}   [opts]
+ * @param {function} [opts.onProgress] appelé à chaque amélioration du point
+ * @param {number}   [opts.watchMs]    durée max de surveillance
+ */
+export function getBestPosition({ onProgress, watchMs = WATCH_MS } = {}) {
   return new Promise((resolve, reject) => {
     if (!('geolocation' in navigator)) {
       reject(new GeolocError('unsupported', "Ce navigateur ne gère pas la géolocalisation."));
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude, longitude, accuracy } = pos.coords;
+    let best = null;
+    let watchId = null;
+    let timer = null;
+    let settled = false;
 
-        if (accuracy > ACCURACY_MAX_METERS) {
+    const stop = () => {
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      if (timer !== null) clearTimeout(timer);
+      watchId = null;
+      timer = null;
+    };
+
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      stop();
+      if (!best) {
+        reject(
+          new GeolocError(
+            'unavailable',
+            "On n'arrive pas à te situer. Sors à découvert, ou choisis ta zone dans la liste."
+          )
+        );
+        return;
+      }
+      resolve(toResult(best));
+    };
+
+    // Filet de sécurité : on rend la main au bout de watchMs quoi qu'il arrive.
+    timer = setTimeout(finish, watchMs);
+
+    watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const acc = pos.coords.accuracy ?? Infinity;
+        if (!best || acc < (best.coords.accuracy ?? Infinity)) {
+          best = pos;
+          if (onProgress) onProgress(toResult(best));
+        }
+        // Dès qu'on a un vrai point GPS, pas la peine d'attendre la suite.
+        if ((best.coords.accuracy ?? Infinity) <= GOOD_ENOUGH) finish();
+      },
+      (err) => {
+        // Un watch peut émettre une erreur passagère (POSITION_UNAVAILABLE le
+        // temps que la puce accroche) tout en délivrant un point ensuite. On
+        // n'abandonne immédiatement que si l'utilisateur a dit non.
+        if (err.code === 1 /* PERMISSION_DENIED */) {
+          settled = true;
+          stop();
           reject(
-            new GeolocError(
-              'imprecise',
-              `Position trop imprécise (± ${Math.round(accuracy)} m). Choisis ta zone sur la carte.`
-            )
+            new GeolocError('denied', 'Géolocalisation refusée. Choisis ta zone dans la liste.')
           );
           return;
         }
-
-        resolve({ lat: latitude, lng: longitude, accuracy: Math.round(accuracy) });
-      },
-      (err) => {
-        // 1 = PERMISSION_DENIED, 2 = POSITION_UNAVAILABLE, 3 = TIMEOUT
-        if (err.code === 1) {
-          reject(new GeolocError('denied', 'Géolocalisation refusée. Choisis ta zone manuellement.'));
-        } else if (err.code === 3) {
-          reject(new GeolocError('timeout', 'Le GPS a mis trop de temps. Réessaie ou choisis ta zone.'));
-        } else {
-          reject(new GeolocError('unavailable', 'Position indisponible. Choisis ta zone manuellement.'));
-        }
+        // Sinon on laisse tourner : le timer finira par nous départager, avec le
+        // meilleur point reçu entre-temps s'il y en a un.
       },
       {
-        enableHighAccuracy: true, // force the GPS chip; network location is 100 m–3 km, unusable
-        timeout: 10000,
+        enableHighAccuracy: true, // force la puce GPS ; le réseau seul = 100 m–3 km
+        timeout: watchMs,
         maximumAge: 0,
       }
     );

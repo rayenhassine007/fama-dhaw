@@ -4,8 +4,12 @@
 // GPS server-side (never trusted from the client), Turnstile is verified, the
 // IP is hashed, rate limits apply, and the aggregated state is recomputed.
 import { sql } from './_db.js';
-import { zoneForPoint } from '../shared/zones.js';
+import { zonesNear, candidateRadiusKm } from '../shared/zones.js';
 import { readBody, getClientIp, hashIp, verifyTurnstile, recomputeState } from './_helpers.js';
+
+// Précision au-delà de laquelle on refuse : même avec confirmation humaine, un
+// point aussi vague ne prouve plus rien sur la zone.
+const ACCURACY_HARD_MAX = 5000;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Méthode non autorisée' });
@@ -19,16 +23,30 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Position manquante' });
   if (!device_id || typeof device_id !== 'string')
     return res.status(400).json({ error: 'Appareil non identifié' });
-  if (accuracy && accuracy > 1000) return res.status(400).json({ error: 'GPS trop imprécis' });
+  if (accuracy && accuracy > ACCURACY_HARD_MAX)
+    return res.status(400).json({ error: 'GPS trop imprécis pour signaler' });
 
   const ip = getClientIp(req);
 
   const human = await verifyTurnstile(turnstile_token, ip);
   if (!human) return res.status(403).json({ error: 'Vérification anti-bot échouée' });
 
-  // Zone is derived HERE, from the GPS — a user can only affect their own zone.
-  const zone = zoneForPoint(lat, lng);
-  if (!zone) return res.status(400).json({ error: 'Hors de la zone de couverture' });
+  // La zone est décidée ICI, à partir du GPS — jamais sur la simple parole du
+  // client (§8). Quand le point est flou, on tolère que l'utilisateur précise
+  // laquelle de SES zones plausibles est la bonne : on ne retient son choix que
+  // s'il tombe dans le rayon d'incertitude de son propre GPS. Impossible donc de
+  // voter pour un quartier où l'on ne se trouve pas.
+  const candidates = zonesNear(lat, lng, candidateRadiusKm(accuracy));
+  if (candidates.length === 0)
+    return res.status(400).json({ error: 'Hors de la zone de couverture' });
+
+  let zone = candidates[0];
+  if (body.zone_id) {
+    const picked = candidates.find((z) => z.id === body.zone_id);
+    if (!picked)
+      return res.status(400).json({ error: "Cette zone est trop loin de ta position." });
+    zone = picked;
+  }
 
   const ipHash = hashIp(ip);
 

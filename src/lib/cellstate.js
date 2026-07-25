@@ -40,6 +40,8 @@ function normalize(row) {
     confidence: row.confidence ?? 0,
     n_reports: row.n_reports ?? 0,
     n_distinct: row.n_distinct ?? 0,
+    n_down: row.n_down ?? 0,
+    n_up: row.n_up ?? 0,
     confirmed: (row.n_distinct ?? 0) >= 3,
     updated_at: row.updated_at,
   };

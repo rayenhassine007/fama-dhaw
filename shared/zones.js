@@ -451,3 +451,42 @@ export function zoneForPoint(lat, lng) {
   if (distanceKm(lat, lng, best.lat, best.lng) > COVERAGE_MAX_KM) return null;
   return best;
 }
+
+// Rayon de candidature (km) pour une précision GPS donnée (mètres).
+//
+// Un point à ± 3 km dans Tunis intra-muros tombe sur un centroïde quasi au
+// hasard parmi des dizaines : prétendre connaître LA zone serait malhonnête
+// (§2.6). On expose donc toutes les zones physiquement plausibles et on laisse
+// l'humain trancher — mais uniquement dans SON rayon d'incertitude.
+//
+// Ce rayon sert AUSSI de contrôle serveur : c'est lui qui borne les zones qu'un
+// appareil a le droit de faire bouger. Il colle donc à l'incertitude réelle du
+// GPS, sans plancher généreux — sinon un point précis ouvrirait quand même le
+// vote sur tout le voisinage. Le petit plancher (300 m) absorbe seulement
+// l'imprécision de NOS centroïdes, qui sont approximatifs. Quand rien ne tombe
+// dans le rayon (zones rurales espacées), zonesNear() renvoie de toute façon la
+// plus proche, donc le cas « je suis loin de tout » reste couvert.
+const CANDIDATE_FLOOR_KM = 0.3;
+
+export function candidateRadiusKm(accuracyMeters) {
+  const acc = Number(accuracyMeters);
+  if (!Number.isFinite(acc) || acc <= 0) return CANDIDATE_FLOOR_KM;
+  return Math.min(15, Math.max(CANDIDATE_FLOOR_KM, acc / 1000));
+}
+
+/**
+ * Zones dont le centre est à moins de `radiusKm` du point, les plus proches
+ * d'abord. Toujours au moins la plus proche (si dans la couverture), pour que
+ * l'appelant ait systématiquement un candidat.
+ */
+export function zonesNear(lat, lng, radiusKm) {
+  const scored = [];
+  for (const z of ZONES) {
+    const d = distanceKm(lat, lng, z.lat, z.lng);
+    if (d <= COVERAGE_MAX_KM) scored.push({ zone: z, d });
+  }
+  if (scored.length === 0) return [];
+  scored.sort((a, b) => a.d - b.d);
+  const within = scored.filter((s) => s.d <= radiusKm);
+  return (within.length > 0 ? within : [scored[0]]).map((s) => s.zone);
+}
