@@ -154,6 +154,13 @@ body {
   color: var(--up);
   border-color: var(--up);
 }
+/* Zone devinée par l'IP : jamais présentée comme une certitude (§2.6) */
+.badge.approx {
+  color: var(--accent);
+  border-color: var(--accent);
+  text-transform: none;
+  font-size: 11px;
+}
 
 /* Buttons */
 .report-buttons {

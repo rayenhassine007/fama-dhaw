@@ -13,6 +13,7 @@ import { zoneForPoint, zonesNear, candidateRadiusKm, distanceKm } from '../lib/z
 import { ZONES } from '../data/zones.js';
 import { getDeviceId } from '../lib/device.js';
 import { fetchAllStates, subscribeStates } from '../lib/cellstate.js';
+import { fetchIpZone } from '../lib/where.js';
 import { submitReport } from '../lib/report.js';
 import { submitZoneSuggestion } from '../lib/suggestZone.js';
 import { getTurnstileToken } from '../lib/turnstile.js';
@@ -34,6 +35,7 @@ let query = '';
 let expandedId = null; // zone dépliée (détail + boutons)
 let expandedGovs = new Set(); // gouvernorats dépliés
 let pendingFix = null; // point GPS flou en attente de confirmation humaine
+let ipDone = false; // la tentative de localisation par IP est terminée
 let unsubscribe = null;
 
 // Déplie le gouvernorat d'une zone (appelé quand on ancre l'utilisateur, pour
@@ -110,8 +112,28 @@ export function renderHome(container) {
   drawList();
 
   refreshStates();
+  locateByIp();
   if (unsubscribe) unsubscribe();
   unsubscribe = subscribeStates(refreshStates);
+}
+
+// Pré-remplit la zone via l'IP, sans rien demander à l'utilisateur. On ne touche
+// à rien s'il a déjà une ancre : un point GPS ou un choix manuel valent toujours
+// mieux qu'une IP.
+async function locateByIp() {
+  if (anchor) return;
+  const hit = await fetchIpZone();
+  ipDone = true;
+  if (!hit || anchor) {
+    // Échec (ou l'utilisateur s'est localisé entre-temps) : on retombe sur la
+    // liste, qui reste entièrement utilisable.
+    if (!anchor) drawMyZone();
+    return;
+  }
+  saveAnchor({ mode: 'ip', zoneId: hit.zone_id, city: hit.city || null });
+  expandGovOf(hit.zone_id);
+  drawMyZone();
+  drawList();
 }
 
 async function refreshStates() {
@@ -137,18 +159,20 @@ function drawMyZone() {
   }
 
   if (!anchor) {
-    box.innerHTML = `
-      <div class="status-card state-unknown">
-        <div class="big-status">Ma zone</div>
-        <div class="status-sub">
-          On utilise ta position <strong>juste pour trouver ta zone</strong>. Rien de personnel
-          n'est stocké. Tu pourras signaler seulement pour ta zone.
-        </div>
-        <button class="btn btn-primary" id="locate" style="margin-top:16px">📍 Trouver ma zone</button>
-        <div id="locate-err"></div>
-      </div>
-      <p class="help-text">Ou fais défiler : toutes les zones du pays sont en dessous.</p>
-    `;
+    // Pas encore d'ancre : l'IP est en cours d'interrogation. On ne réclame
+    // surtout pas le GPS ici — c'est le meilleur moyen de faire fuir les gens.
+    box.innerHTML = ipDone
+      ? `<div class="status-card state-unknown">
+           <div class="big-status">Ma zone</div>
+           <div class="status-sub">On n'a pas réussi à deviner ta région.
+             Choisis ta zone dans la liste en dessous, ou laisse le GPS la trouver.</div>
+           <button class="btn btn-primary" id="locate" style="margin-top:16px">📍 Trouver ma zone</button>
+           <div id="locate-err"></div>
+         </div>`
+      : `<div class="status-card state-unknown">
+           <div class="big-status">Ma zone</div>
+           <div class="status-sub">On regarde d'où tu te connectes pour ouvrir ta région…</div>
+         </div>`;
     return;
   }
 
@@ -186,10 +210,16 @@ function drawMyZone() {
   }
 
   let buttons = '';
-  if (!isGps) {
+  if (anchor.mode === 'ip') {
+    // Le GPS n'est demandé qu'ici, au moment où il sert vraiment : signaler.
+    buttons = `<p class="help-text">Zone devinée d'après ta connexion —
+      <strong>approximatif</strong>. Si ce n'est pas la bonne, prends-la dans la liste.</p>
+      <button class="btn btn-primary" id="locate" style="margin-top:10px">📍 Signaler chez moi</button>
+      <div id="locate-err"></div>`;
+  } else if (!isGps) {
     buttons = `<p class="help-text">Zone choisie à la main (affichage seulement).
       Active le GPS pour pouvoir signaler.</p>
-      <button class="btn btn-primary" id="locate" style="margin-top:10px">📍 Activer le GPS</button>
+      <button class="btn btn-primary" id="locate" style="margin-top:10px">📍 Signaler chez moi</button>
       <div id="locate-err"></div>`;
   } else if (left > 0) {
     buttons = `<p class="help-text">Merci ! Tu pourras re-signaler dans ${Math.ceil(
@@ -205,17 +235,19 @@ function drawMyZone() {
 
   box.innerHTML = `
     <div class="status-card ${st ? `state-${st.state}` : 'state-unknown'}">
-      <div class="zone-name">Ta zone : <strong>${escapeHtml(zone.name)}</strong> · ${escapeHtml(
-    zone.gov
-  )}</div>
+      <div class="zone-name">${
+        anchor.mode === 'ip' ? 'Ta zone <span class="badge approx">approx.</span>' : 'Ta zone'
+      } : <strong>${escapeHtml(zone.name)}</strong> · ${escapeHtml(zone.gov)}</div>
       <div class="big-status">${big}</div>
       <div class="status-sub">${sub}</div>
       ${confidence}
       ${buttons}
     </div>
-    <p class="help-text">
-      <a href="#" id="relocate" class="link">↻ Refaire ma localisation</a>
-    </p>
+    ${
+      isGps
+        ? `<p class="help-text"><a href="#" id="relocate" class="link">↻ Refaire ma localisation</a></p>`
+        : ''
+    }
   `;
 }
 
