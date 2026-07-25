@@ -248,24 +248,81 @@ body {
 .zone-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  /* Pas de gap : l'en-tête porte sa marge et reste collé à ses zones. */
 }
+/* En-tête de gouvernorat : bouton qui déplie / replie ses zones */
 .gov-header {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  padding: 16px 4px 2px;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--muted);
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  margin-top: 8px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
-.gov-count {
-  font-weight: 600;
-  letter-spacing: 0;
-  text-transform: none;
-  font-size: 12px;
+.gov-header:active {
+  background: var(--surface-2);
+}
+.gov-header.open {
+  background: var(--surface-2);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.gov-chev {
+  flex: none;
+  width: 14px;
+  color: var(--muted);
+  font-size: 17px;
+  text-align: center;
+}
+.gov-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.gov-summary {
+  flex: none;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.gov-summary.down {
+  color: var(--down);
+}
+.gov-total {
+  flex: none;
+  min-width: 26px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-align: center;
+}
+.gov-header.open .gov-total {
+  background: var(--bg);
+}
+
+/* Les zones d'un gouvernorat déplié */
+.gov-zones {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 8px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 12px 12px;
 }
 
 .zone-row {

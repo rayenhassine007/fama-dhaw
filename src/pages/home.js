@@ -31,9 +31,17 @@ let root = null;
 let states = {}; // zoneId -> état agrégé
 let anchor = null; // { mode, zoneId, lat, lng, accuracy, ts }
 let query = '';
-let expandedId = null;
+let expandedId = null; // zone dépliée (détail + boutons)
+let expandedGovs = new Set(); // gouvernorats dépliés
 let pendingFix = null; // point GPS flou en attente de confirmation humaine
 let unsubscribe = null;
+
+// Déplie le gouvernorat d'une zone (appelé quand on ancre l'utilisateur, pour
+// qu'il voie tout de suite son quartier au lieu d'une liste fermée).
+function expandGovOf(zoneId) {
+  const zone = ZONES.find((z) => z.id === zoneId);
+  if (zone) expandedGovs.add(zone.gov);
+}
 
 // --- Persistance légère ---------------------------------------------------
 
@@ -65,6 +73,8 @@ function cooldownLeft() {
 export function renderHome(container) {
   root = container;
   anchor = loadAnchor();
+  // Au retour sur le site, le gouvernorat de l'utilisateur est déjà ouvert.
+  if (anchor) expandGovOf(anchor.zoneId);
 
   root.innerHTML = `
     <div id="my-zone"></div>
@@ -263,6 +273,7 @@ function onMyZoneClick(e) {
         accuracy: pendingFix.accuracy,
         ts: Date.now(),
       });
+      expandGovOf(zone.id);
       pendingFix = null;
       drawMyZone();
       drawList();
@@ -365,7 +376,8 @@ function drawList() {
   if (!box) return;
 
   const q = normalizeText(query);
-  const visible = q ? ZONES.filter((z) => normalizeText(z.name).includes(q)) : ZONES;
+  const searching = q.length > 0;
+  const visible = searching ? ZONES.filter((z) => normalizeText(z.name).includes(q)) : ZONES;
 
   if (visible.length === 0) {
     box.innerHTML = `<div class="zone-search-empty">
@@ -378,14 +390,29 @@ function drawList() {
   for (const gov of GOVS) {
     const inGov = visible.filter((z) => z.gov === gov);
     if (inGov.length === 0) continue;
+
+    // Pendant une recherche on déplie d'office, sinon les résultats seraient
+    // cachés derrière un gouvernorat fermé.
+    const open = searching || expandedGovs.has(gov);
     const nDown = inGov.filter((z) => states[z.id]?.state === 'down').length;
-    html += `<div class="gov-header">
-        <span>${escapeHtml(gov)}</span>
-        <span class="gov-count">${
-          nDown > 0 ? `${nDown} coupée${nDown > 1 ? 's' : ''}` : `${inGov.length} zones`
-        }</span>
-      </div>`;
-    html += inGov.map(zoneRow).join('');
+    const hasMine = anchor && inGov.some((z) => z.id === anchor.zoneId);
+
+    html += `<button class="gov-header${open ? ' open' : ''}" data-gov="${escapeHtml(gov)}"
+                     aria-expanded="${open}">
+        <span class="gov-chev">${open ? '⌄' : '›'}</span>
+        <span class="gov-name">${escapeHtml(gov)}${
+      hasMine ? ' <span class="chip-mine">ta zone</span>' : ''
+    }</span>
+        ${
+          nDown > 0
+            ? `<span class="gov-summary down">${nDown} coupée${nDown > 1 ? 's' : ''}</span>`
+            : ''
+        }
+        <span class="gov-total">${inGov.length}</span>
+      </button>`;
+
+    // Un gouvernorat fermé ne rend aucune ligne : la page reste légère (§2.5).
+    if (open) html += `<div class="gov-zones">${inGov.map(zoneRow).join('')}</div>`;
   }
   box.innerHTML = html;
 }
@@ -403,6 +430,16 @@ function onListClick(e) {
     // Épinglage manuel : affichage uniquement, jamais de droit de vote (§8).
     saveAnchor({ mode: 'manual', zoneId: pin.dataset.pin });
     drawMyZone();
+    drawList();
+    return;
+  }
+
+  // Un gouvernorat se déplie / se replie.
+  const gov = e.target.closest('[data-gov]');
+  if (gov) {
+    const name = gov.dataset.gov;
+    if (expandedGovs.has(name)) expandedGovs.delete(name);
+    else expandedGovs.add(name);
     drawList();
     return;
   }
@@ -448,6 +485,7 @@ async function doLocate() {
         accuracy: fix.accuracy,
         ts: Date.now(),
       });
+      expandGovOf(zone.id);
       pendingFix = null;
       showToast(`Ta zone : ${zone.name}`);
       drawMyZone();
@@ -470,6 +508,7 @@ async function doLocate() {
         accuracy: fix.accuracy,
         ts: Date.now(),
       });
+      expandGovOf(candidates[0].id);
       pendingFix = null;
       drawMyZone();
       drawList();
