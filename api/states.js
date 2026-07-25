@@ -18,12 +18,20 @@ export default async function handler(req, res) {
       from cell_state
       where expires_at > now()
     `,
+    // Mêmes règles que recomputeState : un appareil = une voix, on ne retient
+    // que son dernier signalement. Sinon les compteurs affichés
+    // contrediraient l'état décidé (« 2-2 » alors qu'un seul appareil parle).
     sql`
+      with latest as (
+        select distinct on (device_id, zone_id) zone_id, state
+        from votes
+        where created_at > now() - make_interval(mins => ${WINDOW_MIN})
+        order by device_id, zone_id, created_at desc
+      )
       select zone_id,
              count(*) filter (where state = 'down')::int as n_down,
              count(*) filter (where state = 'up')::int   as n_up
-      from votes
-      where created_at > now() - make_interval(mins => ${WINDOW_MIN})
+      from latest
       group by zone_id
     `,
   ]);

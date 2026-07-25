@@ -11,6 +11,13 @@ import { readBody, getClientIp, hashIp, verifyTurnstile, recomputeState } from '
 // point aussi vague ne prouve plus rien sur la zone.
 const ACCURACY_HARD_MAX = 5000;
 
+const DEVICE_COOLDOWN_MIN = 10; // 1 signalement / appareil / 10 min
+// Plafond par IP : volontairement haut. Il n'est là que pour couper une
+// inondation évidente, pas pour limiter les gens — voir le commentaire sur le
+// CGNAT plus bas. La vraie protection contre le bourrage est ailleurs : un
+// appareil = une voix dans recomputeState().
+const IP_BURST_MAX = 40;
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Méthode non autorisée' });
   if (!sql) return res.status(503).json({ error: 'Base de données non configurée' });
@@ -50,15 +57,34 @@ export default async function handler(req, res) {
 
   const ipHash = hashIp(ip);
 
-  // Rate limit: 1 vote / 10 min per device OR per IP (§7.6).
-  const recent = await sql`
+  // Rate limit (§7.6). Les deux limites sont SÉPARÉES, et c'est important :
+  //
+  // La vraie limite est par APPAREIL. La limite par IP ne peut être qu'un
+  // garde-fou anti-inondation très large, parce qu'en Tunisie une IP ne désigne
+  // pas une personne : une famille ou un immeuble partagent la box, et surtout
+  // les opérateurs mobiles sont en CGNAT, donc des milliers d'abonnés sortent
+  // par la même adresse. Les fusionner (l'ancien « device OR ip ») bloquait le
+  // deuxième téléphone d'un même foyer pendant 10 minutes.
+  const sameDevice = await sql`
     select 1 from votes
-    where (device_id = ${device_id} or ip_hash = ${ipHash})
-      and created_at > now() - interval '10 minutes'
+    where device_id = ${device_id}
+      and created_at > now() - make_interval(mins => ${DEVICE_COOLDOWN_MIN})
     limit 1
   `;
-  if (recent.length > 0)
-    return res.status(429).json({ error: 'Déjà signalé récemment. Réessaie dans quelques minutes.' });
+  if (sameDevice.length > 0)
+    return res
+      .status(429)
+      .json({ error: 'Tu as déjà signalé récemment. Réessaie dans quelques minutes.' });
+
+  const fromIp = await sql`
+    select count(*)::int as n from votes
+    where ip_hash = ${ipHash}
+      and created_at > now() - make_interval(mins => ${DEVICE_COOLDOWN_MIN})
+  `;
+  if ((fromIp[0]?.n ?? 0) >= IP_BURST_MAX)
+    return res
+      .status(429)
+      .json({ error: 'Trop de signalements depuis cette connexion. Réessaie dans quelques minutes.' });
 
   // TODO(asn): look up the IP's ASN to (a) reject non-residential-TN ASNs (§7.2)
   // and (b) infer mobile-vs-fixed for the connection↔declaration cross-check.

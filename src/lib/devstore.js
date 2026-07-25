@@ -46,34 +46,40 @@ export function devZoneState(zoneId) {
   const votes = fresh(load(), now).filter((v) => v.zoneId === zoneId);
   if (votes.length === 0) return null;
 
-  const down = votes.filter((v) => v.state === 'down');
-  const up = votes.filter((v) => v.state === 'up');
-  const majority = down.length >= up.length ? 'down' : 'up';
-  const winning = majority === 'down' ? down : up;
-
-  const distinct = new Set(winning.map((v) => v.deviceId)).size;
-  const lastTs = Math.max(...votes.map((v) => v.ts));
-
-  // Confidence: unconfirmed until N distinct devices agree, then scales up.
-  let confidence;
-  let state;
-  if (distinct >= N_CONFIRM) {
-    state = majority;
-    confidence = Math.min(100, 50 + distinct * 12);
-  } else {
-    state = majority; // shown, but flagged "non confirmé" by low confidence
-    confidence = distinct * 15;
+  // Un appareil = une voix : on ne garde que son dernier signalement, comme le
+  // fait recomputeState() côté serveur (api/_helpers.js).
+  const byDevice = new Map();
+  for (const v of votes) {
+    const prev = byDevice.get(v.deviceId);
+    if (!prev || v.ts > prev.ts) byDevice.set(v.deviceId, v);
   }
+  const latest = [...byDevice.values()];
+
+  const down = latest.filter((v) => v.state === 'down');
+  const up = latest.filter((v) => v.state === 'up');
+
+  let state;
+  if (down.length !== up.length) state = down.length > up.length ? 'down' : 'up';
+  else state = latest.reduce((a, b) => (b.ts > a.ts ? b : a)).state; // le plus récent tranche
+
+  const win = state === 'down' ? down.length : up.length;
+  const lose = state === 'down' ? up.length : down.length;
+  const confirmed = win >= N_CONFIRM && win > lose;
+  const confidence = confirmed
+    ? Math.min(100, 50 + win * 12 - lose * 8)
+    : Math.max(0, win * 15 - lose * 7);
+
+  const lastTs = Math.max(...votes.map((v) => v.ts));
 
   return {
     zoneId,
     state,
     confidence,
-    n_reports: winning.length,
-    n_distinct: distinct,
+    n_reports: latest.length,
+    n_distinct: win,
     n_down: down.length,
     n_up: up.length,
-    confirmed: distinct >= N_CONFIRM,
+    confirmed,
     updated_at: new Date(lastTs).toISOString(),
   };
 }

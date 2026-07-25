@@ -56,37 +56,63 @@ export async function verifyTurnstile(token, ip) {
   }
 }
 
-// Recompute a zone's aggregated state from fresh votes and upsert cell_state.
-// This is the authoritative trust logic — the client never does this.
+// Recalcule l'état agrégé d'une zone et met à jour cell_state.
+// C'est LA logique de confiance ; le client ne la rejoue jamais.
+//
+// Règle centrale : **un appareil = une voix**. On ne garde que le DERNIER
+// signalement de chaque appareil dans la fenêtre, pour deux raisons :
+//   - quelqu'un qui revote parce que le courant est revenu doit REMPLACER son
+//     avis précédent, pas s'ajouter à lui-même ;
+//   - sinon une seule personne qui vote en boucle pèse plus lourd que plusieurs
+//     voisins distincts, ce qui vide de son sens le seuil « N appareils
+//     distincts » du §7.1.
 export async function recomputeState(sql, zoneId) {
-  const votes = await sql`
-    select state, device_id, created_at
+  const latest = await sql`
+    select distinct on (device_id) device_id, state, created_at
     from votes
     where zone_id = ${zoneId}
       and created_at > now() - make_interval(mins => ${WINDOW_MIN})
+    order by device_id, created_at desc
   `;
 
-  if (votes.length === 0) {
+  if (latest.length === 0) {
     await sql`delete from cell_state where zone_id = ${zoneId}`;
     return null;
   }
 
-  const down = votes.filter((v) => v.state === 'down');
-  const up = votes.filter((v) => v.state === 'up');
-  const majority = down.length >= up.length ? 'down' : 'up';
-  const winning = majority === 'down' ? down : up;
-  const distinct = new Set(winning.map((v) => v.device_id)).size;
+  const down = latest.filter((v) => v.state === 'down');
+  const up = latest.filter((v) => v.state === 'up');
 
-  // Unconfirmed until N distinct devices agree, then confidence scales up.
-  const confidence = distinct >= N_CONFIRM ? Math.min(100, 50 + distinct * 12) : distinct * 15;
+  let majority;
+  if (down.length !== up.length) {
+    majority = down.length > up.length ? 'down' : 'up';
+  } else {
+    // Égalité stricte entre appareils : c'est le signalement le plus RÉCENT qui
+    // tranche — un retour de courant est l'information la plus fraîche. La
+    // confiance tombe juste en dessous pour signaler que c'est contesté.
+    majority = latest.reduce((a, b) =>
+      new Date(b.created_at) > new Date(a.created_at) ? b : a
+    ).state;
+  }
 
-  const lastTs = votes.reduce((m, v) => Math.max(m, new Date(v.created_at).getTime()), 0);
+  const win = majority === 'down' ? down.length : up.length;
+  const lose = majority === 'down' ? up.length : down.length;
+
+  // Confirmé seulement si N appareils distincts sont d'accord ET qu'ils sont
+  // majoritaires. Les avis contraires font baisser la confiance.
+  const confirmed = win >= N_CONFIRM && win > lose;
+  const confidence = confirmed
+    ? Math.min(100, 50 + win * 12 - lose * 8)
+    : Math.max(0, win * 15 - lose * 7);
+
+  const distinct = win;
+  const lastTs = latest.reduce((m, v) => Math.max(m, new Date(v.created_at).getTime()), 0);
   const updated = new Date(lastTs).toISOString();
   const expires = new Date(lastTs + WINDOW_MIN * 60000).toISOString();
 
   const rows = await sql`
     insert into cell_state (zone_id, state, confidence, n_reports, n_distinct, updated_at, expires_at)
-    values (${zoneId}, ${majority}, ${confidence}, ${winning.length}, ${distinct}, ${updated}, ${expires})
+    values (${zoneId}, ${majority}, ${confidence}, ${latest.length}, ${distinct}, ${updated}, ${expires})
     on conflict (zone_id) do update set
       state = excluded.state,
       confidence = excluded.confidence,

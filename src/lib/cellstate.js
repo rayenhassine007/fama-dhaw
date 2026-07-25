@@ -34,15 +34,22 @@ export async function fetchZoneState(zoneId) {
 }
 
 function normalize(row) {
+  const nDown = row.n_down ?? 0;
+  const nUp = row.n_up ?? 0;
+  // Compteurs en APPAREILS distincts (un appareil = une voix, cf. l'API).
+  const win = row.state === 'down' ? nDown : nUp;
+  const lose = row.state === 'down' ? nUp : nDown;
   return {
     zoneId: row.zone_id,
     state: row.state,
     confidence: row.confidence ?? 0,
     n_reports: row.n_reports ?? 0,
     n_distinct: row.n_distinct ?? 0,
-    n_down: row.n_down ?? 0,
-    n_up: row.n_up ?? 0,
-    confirmed: (row.n_distinct ?? 0) >= 3,
+    n_down: nDown,
+    n_up: nUp,
+    // « Confirmé » exige la majorité en plus du seuil : une zone à 3 contre 3
+    // reste contestée, on ne la présente pas comme établie (§2.3).
+    confirmed: win >= 3 && win > lose,
     updated_at: row.updated_at,
   };
 }

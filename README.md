@@ -84,6 +84,33 @@ tout de suite** : elle part dans une file de **vérification** (`pending_zones`,
 statut `pending`) pour éviter les blagues, et n'est promue dans la liste
 qu'après validation humaine.
 
+## La règle d'agrégation : **un appareil = une voix**
+
+Seul le **dernier** signalement de chaque appareil compte dans la fenêtre de
+45 min. Deux conséquences voulues :
+
+- quelqu'un qui revote parce que le courant est revenu **remplace** son avis
+  précédent au lieu de s'ajouter à lui-même ;
+- voter en boucle depuis un seul téléphone ne pèse pas plus lourd qu'une seule
+  personne — sinon le seuil « N appareils distincts » (§7.1) ne voudrait rien dire.
+
+L'état affiché est celui qui réunit **le plus d'appareils distincts**. À égalité
+stricte, c'est le signalement le **plus récent** qui tranche (un retour de courant
+est l'information la plus fraîche) et la confiance chute pour dire que c'est
+contesté. Une zone n'est « confirmée » que si elle a **≥ 3 appareils ET la
+majorité** : 3 contre 3 reste contesté.
+
+### Rate-limit : par appareil, pas par IP
+
+Les deux limites sont **séparées**, et ça compte : en Tunisie une IP ne désigne
+pas une personne. Une famille partage la box, et les opérateurs mobiles sont en
+**CGNAT** — des milliers d'abonnés sortent par la même adresse.
+
+| Limite | Valeur | Rôle |
+|---|---|---|
+| par **appareil** | 1 signalement / 10 min | la vraie limite anti-spam |
+| par **IP** | 40 / 10 min | simple garde-fou anti-inondation |
+
 ## Architecture
 
 Front statique (Vite) + **routes API serverless Vercel** (`/api/*`) + **Neon
