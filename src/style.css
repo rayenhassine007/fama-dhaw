@@ -154,13 +154,6 @@ body {
   color: var(--up);
   border-color: var(--up);
 }
-/* Zone devinée par l'IP : jamais présentée comme une certitude (§2.6) */
-.badge.approx {
-  color: var(--accent);
-  border-color: var(--accent);
-  text-transform: none;
-  font-size: 11px;
-}
 
 /* Buttons */
 .report-buttons {
@@ -443,6 +436,21 @@ body {
 .zone-note {
   font-size: 13px;
   color: var(--muted);
+}
+/* Choix manuel de zone : un vrai bouton visible, pas un lien perdu */
+.btn-pin {
+  width: 100%;
+  min-height: 50px;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-size: 15px;
+}
+.btn-pin:active {
+  background: var(--surface-2);
+}
+.zone-body .btn-pin + .zone-note {
+  margin-top: 10px;
 }
 
 /* Confirmation de zone quand le GPS est flou */

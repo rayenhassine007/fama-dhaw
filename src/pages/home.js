@@ -13,7 +13,6 @@ import { zoneForPoint, zonesNear, candidateRadiusKm, distanceKm } from '../lib/z
 import { ZONES } from '../data/zones.js';
 import { getDeviceId } from '../lib/device.js';
 import { fetchAllStates, subscribeStates } from '../lib/cellstate.js';
-import { fetchIpZone } from '../lib/where.js';
 import { submitReport } from '../lib/report.js';
 import { submitZoneSuggestion } from '../lib/suggestZone.js';
 import { getTurnstileToken } from '../lib/turnstile.js';
@@ -35,7 +34,6 @@ let query = '';
 let expandedId = null; // zone dépliée (détail + boutons)
 let expandedGovs = new Set(); // gouvernorats dépliés
 let pendingFix = null; // point GPS flou en attente de confirmation humaine
-let ipDone = false; // la tentative de localisation par IP est terminée
 let unsubscribe = null;
 
 // Déplie le gouvernorat d'une zone (appelé quand on ancre l'utilisateur, pour
@@ -50,19 +48,16 @@ function expandGovOf(zoneId) {
 function loadAnchor() {
   try {
     const a = JSON.parse(localStorage.getItem(ANCHOR_KEY) || 'null');
-    // Une ancre IP n'est qu'une supposition : on ne la ressort jamais du
-    // stockage, on la recalcule à chaque visite (sinon une personne qui se
-    // déplace resterait collée à l'ancienne région pendant des semaines).
+    // Les anciennes ancres 'ip' (géoloc par IP, retirée : bien trop imprécise
+    // en Tunisie à cause du CGNAT des opérateurs) sont ignorées.
     return a && a.mode === 'ip' ? null : a;
   } catch {
     return null;
   }
 }
 
-// persist=false pour les ancres IP : mémoire seulement, jamais sur le disque.
-function saveAnchor(a, { persist = true } = {}) {
+function saveAnchor(a) {
   anchor = a;
-  if (!persist) return;
   try {
     if (a) localStorage.setItem(ANCHOR_KEY, JSON.stringify(a));
     else localStorage.removeItem(ANCHOR_KEY);
@@ -119,28 +114,8 @@ export function renderHome(container) {
   drawList();
 
   refreshStates();
-  locateByIp();
   if (unsubscribe) unsubscribe();
   unsubscribe = subscribeStates(refreshStates);
-}
-
-// Pré-remplit la zone via l'IP, sans rien demander à l'utilisateur. On ne touche
-// à rien s'il a déjà une ancre : un point GPS ou un choix manuel valent toujours
-// mieux qu'une IP.
-async function locateByIp() {
-  if (anchor) return;
-  const hit = await fetchIpZone();
-  ipDone = true;
-  if (!hit || anchor) {
-    // Échec (ou l'utilisateur s'est localisé entre-temps) : on retombe sur la
-    // liste, qui reste entièrement utilisable.
-    if (!anchor) drawMyZone();
-    return;
-  }
-  saveAnchor({ mode: 'ip', zoneId: hit.zone_id, city: hit.city || null }, { persist: false });
-  expandGovOf(hit.zone_id);
-  drawMyZone();
-  drawList();
 }
 
 async function refreshStates() {
@@ -168,18 +143,20 @@ function drawMyZone() {
   if (!anchor) {
     // Pas encore d'ancre : l'IP est en cours d'interrogation. On ne réclame
     // surtout pas le GPS ici — c'est le meilleur moyen de faire fuir les gens.
-    box.innerHTML = ipDone
-      ? `<div class="status-card state-unknown">
-           <div class="big-status">Ma zone</div>
-           <div class="status-sub">On n'a pas réussi à deviner ta région.
-             Choisis ta zone dans la liste en dessous, ou laisse le GPS la trouver.</div>
-           <button class="btn btn-primary" id="locate" style="margin-top:16px">📍 Trouver ma zone</button>
-           <div id="locate-err"></div>
-         </div>`
-      : `<div class="status-card state-unknown">
-           <div class="big-status">Ma zone</div>
-           <div class="status-sub">On regarde d'où tu te connectes pour ouvrir ta région…</div>
-         </div>`;
+    box.innerHTML = `
+      <div class="status-card state-unknown">
+        <div class="big-status">Ma zone</div>
+        <div class="status-sub">
+          On utilise ta position <strong>juste pour trouver ta zone</strong>. Rien de personnel
+          n'est stocké, et c'est ce qui te permettra de signaler chez toi.
+        </div>
+        <button class="btn btn-primary" id="locate" style="margin-top:16px">📍 Trouver ma zone</button>
+        <div id="locate-err"></div>
+      </div>
+      <p class="help-text">
+        Tu peux aussi ouvrir un gouvernorat plus bas et choisir ta zone à la main.
+      </p>
+    `;
     return;
   }
 
@@ -217,15 +194,9 @@ function drawMyZone() {
   }
 
   let buttons = '';
-  if (anchor.mode === 'ip') {
-    // Le GPS n'est demandé qu'ici, au moment où il sert vraiment : signaler.
-    buttons = `<p class="help-text">Zone devinée d'après ta connexion —
-      <strong>approximatif</strong>. Si ce n'est pas la bonne, prends-la dans la liste.</p>
-      <button class="btn btn-primary" id="locate" style="margin-top:10px">📍 Signaler chez moi</button>
-      <div id="locate-err"></div>`;
-  } else if (!isGps) {
-    buttons = `<p class="help-text">Zone choisie à la main (affichage seulement).
-      Active le GPS pour pouvoir signaler.</p>
+  if (!isGps) {
+    buttons = `<p class="help-text">Zone choisie à la main — affichage seulement.
+      Le GPS est ce qui prouve que tu es sur place, donc il débloque le signalement.</p>
       <button class="btn btn-primary" id="locate" style="margin-top:10px">📍 Signaler chez moi</button>
       <div id="locate-err"></div>`;
   } else if (left > 0) {
@@ -242,9 +213,9 @@ function drawMyZone() {
 
   box.innerHTML = `
     <div class="status-card ${st ? `state-${st.state}` : 'state-unknown'}">
-      <div class="zone-name">${
-        anchor.mode === 'ip' ? 'Ta zone <span class="badge approx">approx.</span>' : 'Ta zone'
-      } : <strong>${escapeHtml(zone.name)}</strong> · ${escapeHtml(zone.gov)}</div>
+      <div class="zone-name">Ta zone : <strong>${escapeHtml(zone.name)}</strong> · ${escapeHtml(
+    zone.gov
+  )}</div>
       <div class="big-status">${big}</div>
       <div class="status-sub">${sub}</div>
       ${confidence}
@@ -400,11 +371,14 @@ function zoneBody(zone, st, isMine) {
   } else if (canVote) {
     action = `<div class="zone-note">Tu pourras re-signaler dans ${Math.ceil(left / 60000)} min.</div>`;
   } else if (isMine) {
-    action = `<div class="zone-note">Active le GPS pour signaler ici.</div>`;
+    action = `<button class="btn btn-pin" data-locate="1">📍 Activer le GPS pour signaler ici</button>`;
   } else {
-    action = `<div class="zone-note">Consultation seulement — on ne peut signaler que depuis
-      sa propre zone (vérifié par GPS côté serveur).
-      <a href="#" class="link" data-pin="${zone.id}">📌 C'est ma zone</a></div>`;
+    // Bouton plein et non plus un lien : c'est le chemin de secours quand le GPS
+    // est refusé ou capricieux, il doit se voir.
+    action = `
+      <button class="btn btn-pin" data-pin="${zone.id}">📌 Choisir cette zone comme la mienne</button>
+      <div class="zone-note">Ça l'épingle en haut pour la suivre. Le signalement, lui,
+        reste réservé à ta zone GPS — sinon n'importe qui pourrait voter n'importe où.</div>`;
   }
 
   return detail + action;
@@ -470,6 +444,12 @@ function onListClick(e) {
     saveAnchor({ mode: 'manual', zoneId: pin.dataset.pin });
     drawMyZone();
     drawList();
+    return;
+  }
+
+  // « Activer le GPS » depuis la ligne de sa propre zone.
+  if (e.target.closest('[data-locate]')) {
+    doLocate();
     return;
   }
 

@@ -24,27 +24,18 @@ donc on ne peut signaler que là où l'on se trouve physiquement.
 - **Mode démo** : sans backend configuré, une simulation locale (`devstore.js`)
   fait tourner toute l'UX (vote, TTL, confiance) pour tester hors-ligne.
 
-### Zéro friction : la zone arrive par l'IP, le GPS ne sert qu'à signaler
+### Deux façons de fixer sa zone : le GPS, ou le choix à la main
 
-**On ne demande plus rien au chargement.** À l'ouverture, `GET /api/where` lit les
-en-têtes `x-vercel-ip-*` que Vercel ajoute à chaque requête et en déduit une zone
-approximative : le gouvernorat s'ouvre tout seul, l'état s'affiche, aucun prompt.
+- **« 📍 Trouver ma zone »** (GPS) — la seule qui débloque le signalement, parce
+  que c'est la seule qui prouve qu'on est sur place.
+- **« 📌 Choisir cette zone comme la mienne »** — un vrai bouton dans chaque zone
+  dépliée. Épingle la zone en haut pour la suivre, sans droit de vote.
 
-Cette zone est marquée **`approx.`** dans l'interface et **ne débloque jamais le
-signalement**. Raison : en Tunisie, l'IP donne le gouvernorat au mieux — les
-opérateurs mobiles sont en CGNAT, donc l'IP pointe vers leur point de sortie
-quelle que soit la position réelle (§12). Laisser voter sur cette base rouvrirait
-exactement la faille du concurrent : n'importe qui pourrait signaler n'importe
-quel quartier.
-
-Le GPS n'est donc demandé qu'au moment où il sert vraiment, sur « **Signaler chez
-moi** ». Séquence complète :
-
-| Moment | Ce qu'on demande | Ce que l'utilisateur obtient |
-|---|---|---|
-| Chargement | **rien** | sa région ouverte, l'état de sa zone (`approx.`) |
-| Clic « Signaler chez moi » | GPS | le droit de voter dans sa zone |
-| IP indisponible / hors TN | **rien** | la liste nationale + bouton GPS optionnel |
+> **Géoloc par IP : essayée, retirée.** Une route `/api/where` déduisait la zone
+> des en-têtes `x-vercel-ip-*`, sans aucune permission. Testée en conditions
+> réelles : beaucoup trop imprécise. Les opérateurs tunisiens sont en CGNAT, donc
+> l'IP pointe vers leur point de sortie quelle que soit la position réelle (§12).
+> Supprimée plutôt que gardée comme approximation trompeuse.
 
 ### Géolocalisation : on garde le meilleur point, on ne rejette plus
 
@@ -137,9 +128,6 @@ le vrai backend en local : `vercel dev` (avec un `.env` rempli).
       volée depuis `votes` (donc **aucune migration SQL** à lancer).
 - [x] `POST /api/suggest-zone` — propositions de zones manquantes, mises en file
       `pending` (jamais affichées live) → vérification avant promotion.
-- [x] `GET /api/where` — zone **approximative** déduite de l'IP (en-têtes
-      `x-vercel-ip-*`), sans aucune permission. Affichage uniquement : ne donne
-      jamais le droit de signaler.
 
 ### Reste à faire
 
