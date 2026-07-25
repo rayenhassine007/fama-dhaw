@@ -1,47 +1,54 @@
-// GET /api/states — tous les états de zone non expirés, pour la liste nationale.
+// GET /api/states — l'état de chaque zone, dérivé des signalements FRAIS.
 //
-// On renvoie aussi, par zone, le décompte brut « coupé » vs « courant » de la
-// fenêtre courante. Les deux chiffres sont affichés côte à côte : quand les gens
-// ne sont pas d'accord, ça se voit (§2.3, on n'affiche jamais un booléen sec).
-// Ces compteurs sont calculés à la volée depuis `votes`, donc aucune colonne
-// supplémentaire n'est nécessaire dans `cell_state`.
+// Tout est calculé ici à partir de `votes`, rien n'est lu depuis un cache.
+// C'est le correctif d'un bug bien réel : l'état venait de `cell_state`, écrit
+// seulement au moment d'un vote, pendant que les compteurs étaient recalculés en
+// direct. Les deux se contredisaient à l'écran dès que la situation évoluait
+// sans nouveau vote — parce qu'un signalement avait expiré, ou parce que la
+// règle d'agrégation avait changé entre-temps.
+//
+// La fenêtre glissante fait aussi office de TTL : un signalement plus vieux que
+// WINDOW_MIN n'est simplement plus compté, donc une zone sans activité récente
+// disparaît d'elle-même de la réponse.
 import { sql } from './_db.js';
 import { WINDOW_MIN } from './_helpers.js';
+import { aggregate } from '../shared/aggregate.js';
 
 export default async function handler(req, res) {
   res.setHeader('cache-control', 'no-store');
   if (!sql) return res.status(200).json([]); // démo / base non configurée
 
-  const [rows, counts] = await Promise.all([
-    sql`
-      select zone_id, state, confidence, n_reports, n_distinct, updated_at, expires_at
-      from cell_state
-      where expires_at > now()
-    `,
-    // Mêmes règles que recomputeState : un appareil = une voix, on ne retient
-    // que son dernier signalement. Sinon les compteurs affichés
-    // contrediraient l'état décidé (« 2-2 » alors qu'un seul appareil parle).
-    sql`
-      with latest as (
-        select distinct on (device_id, zone_id) zone_id, state
-        from votes
-        where created_at > now() - make_interval(mins => ${WINDOW_MIN})
-        order by device_id, zone_id, created_at desc
-      )
-      select zone_id,
-             count(*) filter (where state = 'down')::int as n_down,
-             count(*) filter (where state = 'up')::int   as n_up
-      from latest
-      group by zone_id
-    `,
-  ]);
+  // Un appareil = une voix : on ne garde que son dernier signalement par zone.
+  const rows = await sql`
+    with latest as (
+      select distinct on (device_id, zone_id) zone_id, state, created_at
+      from votes
+      where created_at > now() - make_interval(mins => ${WINDOW_MIN})
+      order by device_id, zone_id, created_at desc
+    )
+    select zone_id,
+           count(*) filter (where state = 'down')::int as n_down,
+           count(*) filter (where state = 'up')::int   as n_up,
+           max(created_at)                             as updated_at
+    from latest
+    group by zone_id
+  `;
 
-  const byZone = new Map(counts.map((c) => [c.zone_id, c]));
-  return res.status(200).json(
-    rows.map((r) => ({
-      ...r,
-      n_down: byZone.get(r.zone_id)?.n_down ?? 0,
-      n_up: byZone.get(r.zone_id)?.n_up ?? 0,
-    }))
-  );
+  const out = [];
+  for (const r of rows) {
+    const agg = aggregate(r.n_down, r.n_up);
+    if (!agg) continue;
+    out.push({
+      zone_id: r.zone_id,
+      state: agg.state,
+      confidence: agg.confidence,
+      n_reports: r.n_down + r.n_up,
+      n_distinct: agg.nDistinct,
+      n_down: r.n_down,
+      n_up: r.n_up,
+      confirmed: agg.confirmed,
+      updated_at: r.updated_at,
+    });
+  }
+  return res.status(200).json(out);
 }

@@ -14,12 +14,11 @@ export async function fetchAllStates() {
   if (!USE_API) return devAllStates();
   try {
     const rows = await apiGet('/api/states');
-    const now = Date.now();
+    // Plus de filtre d'expiration ici : /api/states ne compte que les
+    // signalements de la fenêtre glissante, donc une zone sans activité récente
+    // n'est déjà plus dans la réponse.
     const out = {};
-    for (const row of rows) {
-      if (row.expires_at && new Date(row.expires_at).getTime() < now) continue;
-      out[row.zone_id] = normalize(row);
-    }
+    for (const row of rows) out[row.zone_id] = normalize(row);
     return out;
   } catch (e) {
     console.warn('fetchAllStates', e.message);
@@ -33,39 +32,19 @@ export async function fetchZoneState(zoneId) {
   return all[zoneId] || null;
 }
 
+// Le client n'agrège RIEN (§8) : le serveur a déjà appliqué shared/aggregate.js
+// et envoie l'état, la confiance et « confirmé ». On se contente de recopier,
+// pour qu'il n'existe aucun second calcul susceptible de diverger.
 function normalize(row) {
-  const nDown = row.n_down ?? 0;
-  const nUp = row.n_up ?? 0;
-  // Compteurs en APPAREILS distincts (un appareil = une voix, cf. l'API).
-  // « mixed » = autant d'appareils de chaque côté : la zone est partagée, on
-  // n'élit pas de camp gagnant. Le constat n'est solide que si les DEUX côtés
-  // atteignent le seuil.
-  if (row.state === 'mixed') {
-    return {
-      zoneId: row.zone_id,
-      state: 'mixed',
-      confidence: row.confidence ?? 0,
-      n_reports: row.n_reports ?? 0,
-      n_distinct: row.n_distinct ?? 0,
-      n_down: nDown,
-      n_up: nUp,
-      confirmed: nDown >= 3 && nUp >= 3,
-      updated_at: row.updated_at,
-    };
-  }
-  const win = row.state === 'down' ? nDown : nUp;
-  const lose = row.state === 'down' ? nUp : nDown;
   return {
     zoneId: row.zone_id,
     state: row.state,
     confidence: row.confidence ?? 0,
     n_reports: row.n_reports ?? 0,
     n_distinct: row.n_distinct ?? 0,
-    n_down: nDown,
-    n_up: nUp,
-    // « Confirmé » exige la majorité en plus du seuil : une zone à 3 contre 3
-    // reste contestée, on ne la présente pas comme établie (§2.3).
-    confirmed: win >= 3 && win > lose,
+    n_down: row.n_down ?? 0,
+    n_up: row.n_up ?? 0,
+    confirmed: Boolean(row.confirmed),
     updated_at: row.updated_at,
   };
 }

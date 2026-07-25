@@ -1,10 +1,11 @@
 // Server-side helpers for the API routes: body parsing, IP hashing, Turnstile
 // verification, and the trust aggregation (spec §4.3, §7).
 import crypto from 'node:crypto';
+import { aggregate, N_CONFIRM } from '../shared/aggregate.js';
 
 // Sliding window for aggregation + TTL, and the "confirmed" threshold.
 export const WINDOW_MIN = 45; // minutes — reports older than this expire
-export const N_CONFIRM = 3; // distinct devices needed to confirm a state (§7.1)
+export { N_CONFIRM };
 
 export async function readBody(req) {
   if (req.body && typeof req.body === 'object') return req.body;
@@ -80,40 +81,16 @@ export async function recomputeState(sql, zoneId) {
     return null;
   }
 
-  const down = latest.filter((v) => v.state === 'down');
-  const up = latest.filter((v) => v.state === 'up');
+  const nDown = latest.filter((v) => v.state === 'down').length;
+  const nUp = latest.filter((v) => v.state === 'up').length;
 
-  let majority;
-  let win;
-  let lose;
-  let confidence;
+  // Une seule et même règle que /api/states (shared/aggregate.js) : impossible
+  // que l'état écrit ici diverge de celui qui est affiché.
+  const agg = aggregate(nDown, nUp);
+  const majority = agg.state;
+  const confidence = agg.confidence;
+  const distinct = agg.nDistinct;
 
-  if (down.length === up.length) {
-    // Autant d'appareils de chaque côté : on n'élit PAS de vainqueur.
-    // Pendant un délestage, une zone est souvent coupée en partie seulement —
-    // deux voisins peuvent honnêtement ne pas vivre la même chose. Trancher
-    // reviendrait à donner tort à la moitié des gens qui ont signalé (§2.3).
-    majority = 'mixed';
-    win = down.length;
-    lose = up.length;
-    // Ici la confiance porte sur le fait que la zone est bien PARTAGÉE : plus il
-    // y a d'appareils des deux côtés, plus ce constat est solide.
-    confidence = Math.min(100, (down.length + up.length) * 12);
-  } else {
-    majority = down.length > up.length ? 'down' : 'up';
-    win = majority === 'down' ? down.length : up.length;
-    lose = majority === 'down' ? up.length : down.length;
-    // Confirmé seulement si N appareils distincts sont d'accord ET qu'ils sont
-    // majoritaires. Les avis contraires font baisser la confiance.
-    const confirmed = win >= N_CONFIRM && win > lose;
-    confidence = confirmed
-      ? Math.min(100, 50 + win * 12 - lose * 8)
-      : Math.max(0, win * 15 - lose * 7);
-  }
-
-  // Pour un état « partagé », les deux camps attestent le partage : on compte
-  // donc tout le monde.
-  const distinct = majority === 'mixed' ? down.length + up.length : win;
   const lastTs = latest.reduce((m, v) => Math.max(m, new Date(v.created_at).getTime()), 0);
   const updated = new Date(lastTs).toISOString();
   const expires = new Date(lastTs + WINDOW_MIN * 60000).toISOString();

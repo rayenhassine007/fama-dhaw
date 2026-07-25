@@ -9,9 +9,10 @@
 // NOTE: this is NOT the trust model. Real aggregation must run server-side;
 // a browser can't be trusted to count "distinct devices". This is a stand-in.
 
+import { aggregate } from '../../shared/aggregate.js';
+
 const KEY = 'dhaw_dev_votes';
 const WINDOW_MS = 45 * 60 * 1000; // TTL — reports older than this are ignored
-const N_CONFIRM = 3; // distinct devices needed to "confirm" a state (§7.1)
 
 function load() {
   try {
@@ -58,39 +59,22 @@ export function devZoneState(zoneId) {
   const down = latest.filter((v) => v.state === 'down');
   const up = latest.filter((v) => v.state === 'up');
 
-  // Égalité entre appareils → « partagé » : on n'élit pas de camp gagnant, une
-  // zone peut être coupée en partie seulement (même règle que le serveur).
-  let state;
-  let confidence;
-  let confirmed;
-  let distinct;
-  if (down.length === up.length) {
-    state = 'mixed';
-    confidence = Math.min(100, (down.length + up.length) * 12);
-    confirmed = down.length >= N_CONFIRM && up.length >= N_CONFIRM;
-    distinct = down.length + up.length;
-  } else {
-    state = down.length > up.length ? 'down' : 'up';
-    const win = state === 'down' ? down.length : up.length;
-    const lose = state === 'down' ? up.length : down.length;
-    confirmed = win >= N_CONFIRM && win > lose;
-    confidence = confirmed
-      ? Math.min(100, 50 + win * 12 - lose * 8)
-      : Math.max(0, win * 15 - lose * 7);
-    distinct = win;
-  }
+  // Exactement la même fonction que le serveur : la simulation ne peut pas
+  // diverger de la production.
+  const agg = aggregate(down.length, up.length);
+  if (!agg) return null;
 
   const lastTs = Math.max(...votes.map((v) => v.ts));
 
   return {
     zoneId,
-    state,
-    confidence,
+    state: agg.state,
+    confidence: agg.confidence,
     n_reports: latest.length,
-    n_distinct: distinct,
+    n_distinct: agg.nDistinct,
     n_down: down.length,
     n_up: up.length,
-    confirmed,
+    confirmed: agg.confirmed,
     updated_at: new Date(lastTs).toISOString(),
   };
 }
