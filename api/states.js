@@ -19,33 +19,43 @@ export default async function handler(req, res) {
   if (!sql) return res.status(200).json([]); // démo / base non configurée
 
   // Un appareil = une voix : on ne garde que son dernier signalement par zone.
+  // On compte aussi les CONNEXIONS distinctes derrière chaque camp, pour borner
+  // ce qu'une seule d'entre elles peut peser (voir shared/aggregate.js).
   const rows = await sql`
     with latest as (
-      select distinct on (device_id, zone_id) zone_id, state, created_at
+      select distinct on (device_id, zone_id) zone_id, ip_hash, state, created_at
       from votes
       where created_at > now() - make_interval(mins => ${WINDOW_MIN})
       order by device_id, zone_id, created_at desc
     )
     select zone_id,
-           count(*) filter (where state = 'down')::int as n_down,
-           count(*) filter (where state = 'up')::int   as n_up,
-           max(created_at)                             as updated_at
+           count(*) filter (where state = 'down')::int              as dev_down,
+           count(*) filter (where state = 'up')::int                as dev_up,
+           count(distinct ip_hash) filter (where state = 'down')::int as ips_down,
+           count(distinct ip_hash) filter (where state = 'up')::int   as ips_up,
+           max(created_at)                                          as updated_at
     from latest
     group by zone_id
   `;
 
   const out = [];
   for (const r of rows) {
-    const agg = aggregate(r.n_down, r.n_up);
+    const agg = aggregate(
+      { devices: r.dev_down, ips: r.ips_down },
+      { devices: r.dev_up, ips: r.ips_up }
+    );
     if (!agg) continue;
     out.push({
       zone_id: r.zone_id,
       state: agg.state,
       confidence: agg.confidence,
-      n_reports: r.n_down + r.n_up,
+      n_reports: r.dev_down + r.dev_up,
       n_distinct: agg.nDistinct,
-      n_down: r.n_down,
-      n_up: r.n_up,
+      // Comptes de VOIX (déjà bornés par connexion), pas d'appareils bruts :
+      // c'est ce qui a réellement pesé dans la décision, donc c'est ce qu'on
+      // affiche — sinon les chiffres contrediraient l'état.
+      n_down: agg.nDown,
+      n_up: agg.nUp,
       confirmed: agg.confirmed,
       updated_at: r.updated_at,
     });

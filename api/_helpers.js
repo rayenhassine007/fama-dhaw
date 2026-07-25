@@ -69,7 +69,7 @@ export async function verifyTurnstile(token, ip) {
 //     distincts » du §7.1.
 export async function recomputeState(sql, zoneId) {
   const latest = await sql`
-    select distinct on (device_id) device_id, state, created_at
+    select distinct on (device_id) device_id, ip_hash, state, created_at
     from votes
     where zone_id = ${zoneId}
       and created_at > now() - make_interval(mins => ${WINDOW_MIN})
@@ -81,12 +81,14 @@ export async function recomputeState(sql, zoneId) {
     return null;
   }
 
-  const nDown = latest.filter((v) => v.state === 'down').length;
-  const nUp = latest.filter((v) => v.state === 'up').length;
+  const side = (s) => {
+    const rows = latest.filter((v) => v.state === s);
+    return { devices: rows.length, ips: new Set(rows.map((v) => v.ip_hash)).size };
+  };
 
   // Une seule et même règle que /api/states (shared/aggregate.js) : impossible
   // que l'état écrit ici diverge de celui qui est affiché.
-  const agg = aggregate(nDown, nUp);
+  const agg = aggregate(side('down'), side('up'));
   const majority = agg.state;
   const confidence = agg.confidence;
   const distinct = agg.nDistinct;

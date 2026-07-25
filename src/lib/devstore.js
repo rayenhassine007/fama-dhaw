@@ -61,7 +61,14 @@ export function devZoneState(zoneId) {
 
   // Exactement la même fonction que le serveur : la simulation ne peut pas
   // diverger de la production.
-  const agg = aggregate(down.length, up.length);
+  //
+  // En mode démo tout part du même navigateur, donc d'une seule connexion : on
+  // le déclare honnêtement (ips: 1), ce qui reproduit fidèlement le plafond de
+  // voix par connexion — y compris le cas des onglets privés.
+  const agg = aggregate(
+    { devices: down.length, ips: down.length ? 1 : 0 },
+    { devices: up.length, ips: up.length ? 1 : 0 }
+  );
   if (!agg) return null;
 
   const lastTs = Math.max(...votes.map((v) => v.ts));
@@ -72,8 +79,8 @@ export function devZoneState(zoneId) {
     confidence: agg.confidence,
     n_reports: latest.length,
     n_distinct: agg.nDistinct,
-    n_down: down.length,
-    n_up: up.length,
+    n_down: agg.nDown,
+    n_up: agg.nUp,
     confirmed: agg.confirmed,
     updated_at: new Date(lastTs).toISOString(),
   };

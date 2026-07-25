@@ -84,7 +84,25 @@ tout de suite** : elle part dans une file de **vérification** (`pending_zones`,
 statut `pending`) pour éviter les blagues, et n'est promue dans la liste
 qu'après validation humaine.
 
-## La règle d'agrégation : **un appareil = une voix**
+## La règle d'agrégation : **un appareil = une voix**, une connexion en vaut 2 au plus
+
+> **Faille trouvée en test.** Le `device_id` vit dans `localStorage`, dont la
+> navigation privée a un stock vierge : un seul téléphone fabriquait autant
+> d'« appareils distincts » qu'il ouvrait d'onglets.
+>
+> On ne peut pas exiger des IP toutes distinctes — une famille partage la box, et
+> les opérateurs mobiles sont en **CGNAT**, donc des milliers d'abonnés sortent
+> par la même adresse. Le compromis retenu : **une connexion porte au plus 2
+> voix**. Un couple sur la même box compte pleinement, cinq onglets privés ne
+> valent que 2, et surtout **une seule connexion ne peut jamais confirmer une
+> zone** — il en faut au moins deux. Ça sépare au passage « le quartier est
+> coupé » de « mon disjoncteur a sauté ».
+>
+> Ce n'est pas infaillible : quelqu'un qui alterne wifi et données mobiles a deux
+> connexions. Sans compte utilisateur, la résistance parfaite n'existe pas — d'où
+> le principe du §7, empiler des mesures imparfaites plutôt qu'en chercher une
+> absolue.
+
 
 Seul le **dernier** signalement de chaque appareil compte dans la fenêtre de
 45 min. Deux conséquences voulues :
