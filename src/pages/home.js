@@ -134,6 +134,24 @@ async function refreshStates() {
   drawList();
 }
 
+// Nombre d'appareils d'accord avec l'état affiché, et nombre qui le contredisent.
+// Les compteurs venant de l'API sont déjà en APPAREILS distincts (un appareil =
+// une voix), pas en votes bruts.
+function tally(st) {
+  return st.state === 'down'
+    ? { agree: st.n_down, disagree: st.n_up }
+    : { agree: st.n_up, disagree: st.n_down };
+}
+
+// Pourquoi ce n'est pas encore « confirmé » — dire à l'utilisateur ce qui manque
+// vaut mieux qu'un simple badge orange.
+function confirmHint(agree, disagree) {
+  const missing = 3 - agree;
+  if (missing > 0)
+    return `Encore ${missing} appareil${missing > 1 ? 's' : ''} d'accord pour confirmer.`;
+  return `Les signalements se contredisent — on attend d'y voir plus clair.`;
+}
+
 // --- Bloc « Ma zone » (épinglé en haut) -----------------------------------
 
 function drawMyZone() {
@@ -194,9 +212,18 @@ function drawMyZone() {
     const badge = st.confirmed
       ? `<span class="badge confirmed">confirmé</span>`
       : `<span class="badge unconfirmed">non confirmé</span>`;
-    confidence = `<div class="confidence">${badge} · ${st.n_distinct} appareil${
-      st.n_distinct > 1 ? 's' : ''
-    } distinct${st.n_distinct > 1 ? 's' : ''} · confiance ${st.confidence}%</div>`;
+    // On montre les DEUX camps. N'afficher que les appareils d'accord laissait
+    // croire que les autres n'avaient pas signalé, alors qu'ils ont dit le
+    // contraire — c'est justement ce désaccord qui fait chuter la confiance.
+    const { agree, disagree } = tally(st);
+    confidence = `
+      <div class="confidence">
+        ${badge}
+        <span class="tally">${agree} pour</span>
+        ${disagree > 0 ? `<span class="tally against">${disagree} contre</span>` : ''}
+        <span>confiance ${st.confidence}%</span>
+      </div>
+      ${st.confirmed ? '' : `<div class="confirm-hint">${confirmHint(agree, disagree)}</div>`}`;
   }
 
   let buttons = '';
@@ -359,11 +386,15 @@ function zoneBody(zone, st, isMine) {
     detail = `<div class="zone-detail">Pas de signalement frais. L'état expire après ~45 min,
       donc « inconnu » veut dire « personne n'a signalé récemment ».</div>`;
   } else {
+    const { agree, disagree } = tally(st);
+    const quoi = st.state === 'down' ? 'signale une coupure' : 'signale du courant';
     detail = `<div class="zone-detail">
-        ${st.n_down} « coupé » · ${st.n_up} « courant » · ${st.n_distinct} appareil${
-      st.n_distinct > 1 ? 's' : ''
-    } distinct${st.n_distinct > 1 ? 's' : ''} · confiance ${st.confidence}%
-        ${st.confirmed ? '' : ' — <strong>non confirmé</strong> (moins de 3 appareils d\'accord)'}
+        <span class="tally">${agree} appareil${agree > 1 ? 's' : ''}</span> ${quoi}${
+      disagree > 0
+        ? `, <span class="tally against">${disagree}</span> dit${disagree > 1 ? 'ent' : ''} le contraire`
+        : ''
+    } · confiance ${st.confidence}%
+        ${st.confirmed ? '' : `<br><strong>Non confirmé.</strong> ${confirmHint(agree, disagree)}`}
       </div>`;
   }
 
