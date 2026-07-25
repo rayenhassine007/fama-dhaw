@@ -194,7 +194,7 @@ function tally(st) {
 function confirmHint(st) {
   if (st.state === 'mixed') {
     const manque = Math.max(3 - st.n_down, 3 - st.n_up);
-    return `Encore ${manque} signalement${manque > 1 ? 's' : ''} pour confirmer que la zone est vraiment coupée en deux.`;
+    return `Encore ${manque} signalement${manque > 1 ? 's' : ''} pour confirmer que la coupure ne touche qu'une partie de la zone.`;
   }
   const { agree } = tally(st);
   const missing = 3 - agree;
@@ -251,8 +251,8 @@ function drawMyZone() {
     big = 'Inconnu';
     sub = 'Aucun signalement récent chez toi. Sois le premier.';
   } else if (st.state === 'mixed') {
-    big = "C'est partagé";
-    sub = `Une partie de la zone a du courant, l'autre non · ${timeAgo(st.updated_at)}`;
+    big = 'Coupé par endroits';
+    sub = `Dans ta zone, certains ont du courant et d'autres non · ${timeAgo(st.updated_at)}`;
   } else if (st.state === 'down') {
     big = 'Pas de lumière';
     sub = `Signalé ${timeAgo(st.updated_at)}`;
@@ -406,7 +406,7 @@ function onMyZoneClick(e) {
 
 function statusPill(st) {
   if (!st) return `<span class="status-pill unknown">❔ Inconnu</span>`;
-  if (st.state === 'mixed') return `<span class="status-pill mixed">🌓 Partagé</span>`;
+  if (st.state === 'mixed') return `<span class="status-pill mixed">🌓 Par endroits</span>`;
   if (st.state === 'down') return `<span class="status-pill down">🔌 Pas de lumière</span>`;
   return `<span class="status-pill up">✅ Ça marche</span>`;
 }
@@ -450,11 +450,10 @@ function zoneBody(zone, st, isMine) {
   } else {
     if (st.state === 'mixed') {
       detail = `<div class="zone-detail">
-          Zone <strong>partagée</strong> : <span class="tally against">${st.n_down}</span>
-          sans lumière contre <span class="tally">${st.n_up}</span> avec.
-          Autant de signalements des deux côtés, donc on n'annonce pas de gagnant —
-          la coupure ne touche probablement qu'une partie de la zone.
-          · confiance ${st.confidence}%
+          <span class="tally against">${st.n_down}</span> signalent une coupure,
+          <span class="tally">${st.n_up}</span> ont du courant — autant des deux côtés.
+          La coupure ne touche donc <strong>qu'une partie de la zone</strong> : selon ta rue,
+          tu peux avoir de la lumière ou pas. · confiance ${st.confidence}%
           ${st.confirmed ? '' : `<br>${confirmHint(st)}`}
         </div>`;
     } else {
