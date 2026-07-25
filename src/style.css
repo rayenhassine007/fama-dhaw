@@ -123,10 +123,270 @@ body {
   letter-spacing: 0.01em;
 }
 
+/* Onglets */
+.tabs {
+  display: flex;
+  gap: 8px;
+  padding: 12px 14px 0;
+}
+.tab {
+  flex: 1;
+  min-height: 46px;
+  border-radius: 13px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 14.5px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: background var(--fast), color var(--fast), border-color var(--fast);
+}
+.tab.active {
+  background: linear-gradient(168deg, var(--surface-3), var(--surface-2));
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.tab:active {
+  transform: scale(0.99);
+}
+
 /* Page */
 .page {
   flex: 1;
   padding: 18px 14px 30px;
+}
+.page[hidden] {
+  display: none;
+}
+
+/* ------------------------------------------------------------- Carte */
+
+.map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  justify-content: center;
+  font-size: 12.3px;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+.lg {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.lg-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.lg-dot.down {
+  background: var(--down);
+}
+.lg-dot.up {
+  background: var(--up);
+}
+.lg-dot.mixed {
+  background: var(--warn);
+}
+.lg-dot.unknown {
+  background: var(--unknown);
+}
+
+.map-wrap {
+  position: relative;
+  background: linear-gradient(168deg, var(--surface), var(--bg-soft));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+}
+#map-svg {
+  display: block;
+  width: 100%;
+  height: 62dvh;
+  touch-action: none; /* on gère nous-mêmes glisser et pincer */
+  cursor: grab;
+}
+#map-svg:active {
+  cursor: grabbing;
+}
+
+/* Le pays. Volontairement sobre : ce sont les pastilles qui portent l'info. */
+.map-land {
+  fill: var(--surface-3);
+  stroke: #46566e;
+  stroke-width: 1.4;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Pastilles de zone. --k = 1/échelle : garde une taille constante à l'écran,
+ * sinon elles enflent en zoomant et disparaissent en dézoomant. */
+.zdot {
+  r: calc(6px * var(--k, 1));
+  stroke: rgba(0, 0, 0, 0.6);
+  stroke-width: calc(1.2px * var(--k, 1));
+  transition: fill 0.3s var(--ease);
+}
+.zdot.down {
+  fill: var(--down);
+}
+.zdot.up {
+  fill: var(--up);
+}
+.zdot.mixed {
+  fill: var(--warn);
+}
+.zdot.unknown {
+  fill: var(--unknown);
+  opacity: 0.5;
+}
+.zdot.mine {
+  stroke: #fff;
+  stroke-width: calc(2.6px * var(--k, 1));
+}
+.zdot.sel {
+  stroke: var(--accent);
+  stroke-width: calc(3px * var(--k, 1));
+}
+
+/* Noms de zones : masqués tant qu'on n'a pas assez zoomé, sinon illisible. */
+.zlabel {
+  display: none;
+  font-size: calc(12px * var(--k, 1));
+  font-weight: 700;
+  fill: var(--text);
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: rgba(9, 12, 17, 0.95);
+  stroke-width: calc(3.5px * var(--k, 1));
+  stroke-linejoin: round;
+  pointer-events: none;
+  /* Décalage au-dessus de la pastille, constant à l'écran comme le reste. */
+  transform: translateY(calc(-11px * var(--k, 1)));
+}
+.show-labels .zlabel {
+  display: block;
+}
+
+.map-zoom {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.map-zbtn {
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  background: rgba(27, 33, 48, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-size: 19px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.map-zbtn:active {
+  background: var(--surface-3);
+  border-color: var(--accent);
+}
+
+/* Placé à gauche des boutons de zoom, sinon il les recouvre. */
+.map-hint {
+  position: absolute;
+  left: 10px;
+  right: 62px;
+  bottom: 12px;
+  text-align: center;
+  padding: 7px 13px;
+  border-radius: 999px;
+  background: rgba(9, 12, 17, 0.8);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  transition: opacity var(--med);
+}
+
+.map-info {
+  margin-top: 14px;
+}
+.map-summary {
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--muted);
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.map-summary strong {
+  color: var(--text);
+}
+.map-card {
+  background: linear-gradient(168deg, var(--surface-2), var(--surface));
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--unknown);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+}
+.map-card.state-down {
+  border-left-color: var(--down);
+}
+.map-card.state-up {
+  border-left-color: var(--up);
+}
+.map-card.state-mixed {
+  border-left-color: var(--warn);
+}
+.map-card-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.map-card-name {
+  font-size: 16px;
+  font-weight: 800;
+}
+.map-card-gov {
+  font-size: 12px;
+  color: var(--muted);
+}
+.map-card-state {
+  margin-top: 4px;
+  font-size: 19px;
+  font-weight: 800;
+}
+.state-down .map-card-state {
+  color: var(--down);
+}
+.state-up .map-card-state {
+  color: var(--up);
+}
+.state-mixed .map-card-state {
+  color: var(--warn);
+}
+.state-unknown .map-card-state {
+  color: var(--unknown);
+}
+.map-card-meta {
+  margin-top: 7px;
+  font-size: 12.3px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ----------------------------------------------------- Carte « Ma zone » */

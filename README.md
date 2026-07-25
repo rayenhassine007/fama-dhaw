@@ -24,6 +24,24 @@ donc on ne peut signaler que là où l'on se trouve physiquement.
 - **Mode démo** : sans backend configuré, une simulation locale (`devstore.js`)
   fait tourner toute l'UX (vote, TTL, confiance) pour tester hors-ligne.
 
+### La carte (onglet secondaire)
+
+Carte de la Tunisie **en SVG pur** : aucune tuile, aucune librairie, aucune clé
+de service. Le contour du pays (Natural Earth 1:50m, domaine public) est embarqué
+en dur — 3 ko — parce que la carte doit s'afficher **pendant** une coupure, quand
+le réseau est saturé (§2.5). Le module entier ne pèse que ~4 ko gzip et n'est
+chargé qu'au premier clic sur l'onglet.
+
+Une pastille par zone, colorée : 🔴 coupé · 🟢 courant · 🟡 par endroits ·
+⚫ pas d'info. Glisser pour se déplacer, pincer ou double-taper pour zoomer, et
+**les noms de zones apparaissent une fois zoomé**. Taper une zone ouvre sa fiche.
+
+> **Pourquoi des pastilles et pas des zones remplies.** On ne connaît que le
+> centre *approximatif* de chaque zone, pas ses frontières. Remplir la carte de
+> polygones dessinerait des limites inventées que les gens croiraient vraies —
+> la frontière calculée entre Oudhref et Métouia passe en plein milieu
+> d'Oudhref. Une pastille ne prétend rien d'autre que « par ici ».
+
 ### Deux façons de fixer sa zone : le GPS, ou le choix à la main
 
 - **« 📍 Trouver ma zone »** (GPS) — la seule qui débloque le signalement, parce

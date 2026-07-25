@@ -139,6 +139,18 @@ export function renderHome(container) {
   freshTimer = setInterval(drawFreshness, 10000);
 }
 
+// L'onglet Carte s'abonne pour recevoir les mêmes états, sans refaire d'appel
+// réseau : un seul /api/states alimente les deux vues.
+const stateListeners = new Set();
+export function onStates(fn) {
+  stateListeners.add(fn);
+  if (Object.keys(states).length) fn(states, anchor ? anchor.zoneId : null);
+  return () => stateListeners.delete(fn);
+}
+export function currentStates() {
+  return { states, myZoneId: anchor ? anchor.zoneId : null };
+}
+
 async function refreshStates() {
   try {
     states = (await fetchAllStates()) || {};
@@ -149,6 +161,7 @@ async function refreshStates() {
   drawMyZone();
   drawList();
   drawFreshness();
+  for (const fn of stateListeners) fn(states, anchor ? anchor.zoneId : null);
 }
 
 // « Mis à jour il y a X » — la fraîcheur doit toujours être visible (§10), sinon
