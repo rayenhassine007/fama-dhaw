@@ -35,6 +35,8 @@ let expandedId = null; // zone dépliée (détail + boutons)
 let expandedGovs = new Set(); // gouvernorats dépliés
 let pendingFix = null; // point GPS flou en attente de confirmation humaine
 let unsubscribe = null;
+let lastRefresh = 0; // horodatage du dernier /api/states réussi
+let freshTimer = null;
 
 // La liste est redessinée toutes les 20 s par le polling. Sans ce garde-fou,
 // l'animation d'ouverture se rejouerait à chaque rafraîchissement et la page
@@ -89,6 +91,11 @@ export function renderHome(container) {
   root.innerHTML = `
     <div id="my-zone"></div>
 
+    <div class="refresh-bar">
+      <span id="freshness" class="freshness">Chargement…</span>
+      <button id="refresh" class="btn-refresh" type="button">↻ Actualiser</button>
+    </div>
+
     <div class="zone-search">
       <input id="zone-q" class="zone-search-input" type="search"
              placeholder="🔍 Cherche ta zone..." autocomplete="off" />
@@ -119,19 +126,58 @@ export function renderHome(container) {
   drawMyZone();
   drawList();
 
+  root.querySelector('#refresh').addEventListener('click', manualRefresh);
+
   refreshStates();
   if (unsubscribe) unsubscribe();
   unsubscribe = subscribeStates(refreshStates);
+
+  // Le libellé de fraîcheur vieillit tout seul, sans redessiner la liste.
+  if (freshTimer) clearInterval(freshTimer);
+  freshTimer = setInterval(drawFreshness, 10000);
 }
 
 async function refreshStates() {
   try {
     states = (await fetchAllStates()) || {};
+    lastRefresh = Date.now();
   } catch {
     states = states || {};
   }
   drawMyZone();
   drawList();
+  drawFreshness();
+}
+
+// « Mis à jour il y a X » — la fraîcheur doit toujours être visible (§10), sinon
+// on ne sait pas si un « ça marche » date de 30 secondes ou de 40 minutes.
+function drawFreshness() {
+  const el = root && root.querySelector('#freshness');
+  if (!el) return;
+  if (!lastRefresh) {
+    el.textContent = 'Chargement…';
+    return;
+  }
+  const sec = Math.round((Date.now() - lastRefresh) / 1000);
+  el.textContent =
+    sec < 10 ? 'Mis à jour à l’instant' : sec < 60 ? `Mis à jour il y a ${sec} s` : `Mis à jour ${timeAgo(new Date(lastRefresh).toISOString())}`;
+}
+
+async function manualRefresh() {
+  const btn = root.querySelector('#refresh');
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+  btn.classList.add('spinning');
+  await refreshStates();
+  // Court délai volontaire : sans lui, un rafraîchissement instantané ne donne
+  // aucun retour visible et l'utilisateur croit que le bouton n'a rien fait.
+  setTimeout(() => {
+    const b = root.querySelector('#refresh');
+    if (b) {
+      b.disabled = false;
+      b.classList.remove('spinning');
+    }
+  }, 400);
 }
 
 // Nombre d'appareils d'accord avec l'état affiché, et nombre qui le contredisent.
@@ -145,7 +191,12 @@ function tally(st) {
 
 // Pourquoi ce n'est pas encore « confirmé » — dire à l'utilisateur ce qui manque
 // vaut mieux qu'un simple badge orange.
-function confirmHint(agree, disagree) {
+function confirmHint(st) {
+  if (st.state === 'mixed') {
+    const manque = Math.max(3 - st.n_down, 3 - st.n_up);
+    return `Encore ${manque} signalement${manque > 1 ? 's' : ''} pour confirmer que la zone est vraiment coupée en deux.`;
+  }
+  const { agree } = tally(st);
   const missing = 3 - agree;
   if (missing > 0)
     return `Encore ${missing} appareil${missing > 1 ? 's' : ''} d'accord pour confirmer.`;
@@ -199,6 +250,9 @@ function drawMyZone() {
   if (!st) {
     big = 'Inconnu';
     sub = 'Aucun signalement récent chez toi. Sois le premier.';
+  } else if (st.state === 'mixed') {
+    big = "C'est partagé";
+    sub = `Une partie de la zone a du courant, l'autre non · ${timeAgo(st.updated_at)}`;
   } else if (st.state === 'down') {
     big = 'Pas de lumière';
     sub = `Signalé ${timeAgo(st.updated_at)}`;
@@ -215,15 +269,22 @@ function drawMyZone() {
     // On montre les DEUX camps. N'afficher que les appareils d'accord laissait
     // croire que les autres n'avaient pas signalé, alors qu'ils ont dit le
     // contraire — c'est justement ce désaccord qui fait chuter la confiance.
-    const { agree, disagree } = tally(st);
+    const counts =
+      st.state === 'mixed'
+        ? `<span class="tally against">${st.n_down} sans lumière</span>
+           <span class="tally">${st.n_up} avec</span>`
+        : (() => {
+            const { agree, disagree } = tally(st);
+            return `<span class="tally">${agree} pour</span>
+              ${disagree > 0 ? `<span class="tally against">${disagree} contre</span>` : ''}`;
+          })();
     confidence = `
       <div class="confidence">
         ${badge}
-        <span class="tally">${agree} pour</span>
-        ${disagree > 0 ? `<span class="tally against">${disagree} contre</span>` : ''}
+        ${counts}
         <span>confiance ${st.confidence}%</span>
       </div>
-      ${st.confirmed ? '' : `<div class="confirm-hint">${confirmHint(agree, disagree)}</div>`}`;
+      ${st.confirmed ? '' : `<div class="confirm-hint">${confirmHint(st)}</div>`}`;
   }
 
   let buttons = '';
@@ -345,6 +406,7 @@ function onMyZoneClick(e) {
 
 function statusPill(st) {
   if (!st) return `<span class="status-pill unknown">❔ Inconnu</span>`;
+  if (st.state === 'mixed') return `<span class="status-pill mixed">🌓 Partagé</span>`;
   if (st.state === 'down') return `<span class="status-pill down">🔌 Pas de lumière</span>`;
   return `<span class="status-pill up">✅ Ça marche</span>`;
 }
@@ -386,16 +448,27 @@ function zoneBody(zone, st, isMine) {
     detail = `<div class="zone-detail">Pas de signalement frais. L'état expire après ~45 min,
       donc « inconnu » veut dire « personne n'a signalé récemment ».</div>`;
   } else {
-    const { agree, disagree } = tally(st);
-    const quoi = st.state === 'down' ? 'signale une coupure' : 'signale du courant';
-    detail = `<div class="zone-detail">
-        <span class="tally">${agree} appareil${agree > 1 ? 's' : ''}</span> ${quoi}${
-      disagree > 0
-        ? `, <span class="tally against">${disagree}</span> dit${disagree > 1 ? 'ent' : ''} le contraire`
-        : ''
-    } · confiance ${st.confidence}%
-        ${st.confirmed ? '' : `<br><strong>Non confirmé.</strong> ${confirmHint(agree, disagree)}`}
-      </div>`;
+    if (st.state === 'mixed') {
+      detail = `<div class="zone-detail">
+          Zone <strong>partagée</strong> : <span class="tally against">${st.n_down}</span>
+          sans lumière contre <span class="tally">${st.n_up}</span> avec.
+          Autant de signalements des deux côtés, donc on n'annonce pas de gagnant —
+          la coupure ne touche probablement qu'une partie de la zone.
+          · confiance ${st.confidence}%
+          ${st.confirmed ? '' : `<br>${confirmHint(st)}`}
+        </div>`;
+    } else {
+      const { agree, disagree } = tally(st);
+      const quoi = st.state === 'down' ? 'signale une coupure' : 'signale du courant';
+      detail = `<div class="zone-detail">
+          <span class="tally">${agree} appareil${agree > 1 ? 's' : ''}</span> ${quoi}${
+        disagree > 0
+          ? `, <span class="tally against">${disagree}</span> dit${disagree > 1 ? 'ent' : ''} le contraire`
+          : ''
+      } · confiance ${st.confidence}%
+          ${st.confirmed ? '' : `<br><strong>Non confirmé.</strong> ${confirmHint(st)}`}
+        </div>`;
+    }
   }
 
   let action;

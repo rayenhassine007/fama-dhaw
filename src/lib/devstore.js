@@ -58,16 +58,27 @@ export function devZoneState(zoneId) {
   const down = latest.filter((v) => v.state === 'down');
   const up = latest.filter((v) => v.state === 'up');
 
+  // Égalité entre appareils → « partagé » : on n'élit pas de camp gagnant, une
+  // zone peut être coupée en partie seulement (même règle que le serveur).
   let state;
-  if (down.length !== up.length) state = down.length > up.length ? 'down' : 'up';
-  else state = latest.reduce((a, b) => (b.ts > a.ts ? b : a)).state; // le plus récent tranche
-
-  const win = state === 'down' ? down.length : up.length;
-  const lose = state === 'down' ? up.length : down.length;
-  const confirmed = win >= N_CONFIRM && win > lose;
-  const confidence = confirmed
-    ? Math.min(100, 50 + win * 12 - lose * 8)
-    : Math.max(0, win * 15 - lose * 7);
+  let confidence;
+  let confirmed;
+  let distinct;
+  if (down.length === up.length) {
+    state = 'mixed';
+    confidence = Math.min(100, (down.length + up.length) * 12);
+    confirmed = down.length >= N_CONFIRM && up.length >= N_CONFIRM;
+    distinct = down.length + up.length;
+  } else {
+    state = down.length > up.length ? 'down' : 'up';
+    const win = state === 'down' ? down.length : up.length;
+    const lose = state === 'down' ? up.length : down.length;
+    confirmed = win >= N_CONFIRM && win > lose;
+    confidence = confirmed
+      ? Math.min(100, 50 + win * 12 - lose * 8)
+      : Math.max(0, win * 15 - lose * 7);
+    distinct = win;
+  }
 
   const lastTs = Math.max(...votes.map((v) => v.ts));
 
@@ -76,7 +87,7 @@ export function devZoneState(zoneId) {
     state,
     confidence,
     n_reports: latest.length,
-    n_distinct: win,
+    n_distinct: distinct,
     n_down: down.length,
     n_up: up.length,
     confirmed,

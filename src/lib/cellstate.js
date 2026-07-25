@@ -37,6 +37,22 @@ function normalize(row) {
   const nDown = row.n_down ?? 0;
   const nUp = row.n_up ?? 0;
   // Compteurs en APPAREILS distincts (un appareil = une voix, cf. l'API).
+  // « mixed » = autant d'appareils de chaque côté : la zone est partagée, on
+  // n'élit pas de camp gagnant. Le constat n'est solide que si les DEUX côtés
+  // atteignent le seuil.
+  if (row.state === 'mixed') {
+    return {
+      zoneId: row.zone_id,
+      state: 'mixed',
+      confidence: row.confidence ?? 0,
+      n_reports: row.n_reports ?? 0,
+      n_distinct: row.n_distinct ?? 0,
+      n_down: nDown,
+      n_up: nUp,
+      confirmed: nDown >= 3 && nUp >= 3,
+      updated_at: row.updated_at,
+    };
+  }
   const win = row.state === 'down' ? nDown : nUp;
   const lose = row.state === 'down' ? nUp : nDown;
   return {

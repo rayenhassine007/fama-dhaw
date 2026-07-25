@@ -200,9 +200,14 @@ export const ZONES = [
   { id: 'gabes-el-hamma', name: 'El Hamma', gov: 'Gabès', lat: 33.886, lng: 9.795 },
   { id: 'gabes-gabes-sud', name: 'Gabès Sud', gov: 'Gabès', lat: 33.86, lng: 10.1 },
   { id: 'gabes-gabes-ville', name: 'Gabès Ville', gov: 'Gabès', lat: 33.881, lng: 10.098 },
+  // Ghannouch (zone industrielle, sur la côte) et Métouia (à l'intérieur des
+  // terres) étaient fusionnées en une seule zone dans la liste du concurrent.
+  // Séparées : rien ne garantit qu'elles soient sur le même circuit, et une
+  // fusion rend cette différence structurellement invisible (§4.1).
+  { id: 'gabes-ghannouch', name: 'Ghannouch', gov: 'Gabès', lat: 33.938, lng: 10.093 },
   { id: 'gabes-mareth', name: 'Mareth', gov: 'Gabès', lat: 33.63, lng: 10.28 },
   { id: 'gabes-matmata', name: 'Matmata', gov: 'Gabès', lat: 33.544, lng: 9.97 },
-  { id: 'gabes-metouia-ghannouch', name: 'Métouia / Ghannouch', gov: 'Gabès', lat: 33.966, lng: 10.07 },
+  { id: 'gabes-metouia', name: 'Métouia', gov: 'Gabès', lat: 33.967, lng: 10.0 },
   { id: 'gabes-oudhref', name: 'Oudhref', gov: 'Gabès', lat: 33.925, lng: 10.02 },
   { id: 'gabes-tebelbou', name: 'Tebelbou', gov: 'Gabès', lat: 33.87, lng: 9.85 },
   { id: 'gabes-zrig', name: 'Zrig', gov: 'Gabès', lat: 33.872, lng: 10.082 },

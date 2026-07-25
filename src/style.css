@@ -360,13 +360,82 @@ body {
   border-bottom-color: var(--accent);
 }
 
+/* ------------------------------------------- Fraîcheur + actualisation */
+
+.refresh-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 18px;
+}
+.freshness {
+  font-size: 12.3px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.btn-refresh {
+  flex: none;
+  min-height: 40px;
+  padding: 0 15px;
+  border-radius: 11px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background var(--fast), border-color var(--fast), transform var(--fast);
+}
+.btn-refresh:active {
+  transform: scale(0.97);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.btn-refresh[disabled] {
+  opacity: 0.6;
+  cursor: default;
+}
+.btn-refresh.spinning {
+  animation: spin-pulse 0.4s var(--ease);
+}
+@keyframes spin-pulse {
+  from {
+    opacity: 0.4;
+  }
+}
+
+/* --------------------------------------------- État « zone partagée » */
+
+/* Ni rouge ni vert : une partie de la zone est coupée, l'autre non. Afficher
+ * un gagnant donnerait tort à la moitié des gens qui ont signalé (§2.3). */
+.status-pill.mixed {
+  background: rgba(245, 181, 68, 0.14);
+  color: var(--warn);
+  border-color: rgba(245, 181, 68, 0.34);
+}
+.status-card.state-mixed {
+  border-color: rgba(245, 181, 68, 0.45);
+}
+.status-card.state-mixed::after {
+  background: radial-gradient(circle, rgba(245, 181, 68, 0.22), transparent 68%);
+}
+.state-mixed .big-status {
+  color: var(--warn);
+  text-shadow: 0 0 34px rgba(245, 181, 68, 0.3);
+}
+.zone-row.state-mixed::before {
+  background: linear-gradient(180deg, var(--warn) 0 50%, var(--up) 50% 100%);
+}
+
 /* ---------------------------------------------------------- Recherche */
 
 .zone-search {
   position: sticky;
   top: 58px;
   z-index: 20;
-  margin-top: 20px;
+  margin-top: 10px;
   padding: 10px 0;
   background: linear-gradient(180deg, var(--bg) 62%, transparent);
   backdrop-filter: blur(8px);

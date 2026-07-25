@@ -84,28 +84,36 @@ export async function recomputeState(sql, zoneId) {
   const up = latest.filter((v) => v.state === 'up');
 
   let majority;
-  if (down.length !== up.length) {
-    majority = down.length > up.length ? 'down' : 'up';
+  let win;
+  let lose;
+  let confidence;
+
+  if (down.length === up.length) {
+    // Autant d'appareils de chaque côté : on n'élit PAS de vainqueur.
+    // Pendant un délestage, une zone est souvent coupée en partie seulement —
+    // deux voisins peuvent honnêtement ne pas vivre la même chose. Trancher
+    // reviendrait à donner tort à la moitié des gens qui ont signalé (§2.3).
+    majority = 'mixed';
+    win = down.length;
+    lose = up.length;
+    // Ici la confiance porte sur le fait que la zone est bien PARTAGÉE : plus il
+    // y a d'appareils des deux côtés, plus ce constat est solide.
+    confidence = Math.min(100, (down.length + up.length) * 12);
   } else {
-    // Égalité stricte entre appareils : c'est le signalement le plus RÉCENT qui
-    // tranche — un retour de courant est l'information la plus fraîche. La
-    // confiance tombe juste en dessous pour signaler que c'est contesté.
-    majority = latest.reduce((a, b) =>
-      new Date(b.created_at) > new Date(a.created_at) ? b : a
-    ).state;
+    majority = down.length > up.length ? 'down' : 'up';
+    win = majority === 'down' ? down.length : up.length;
+    lose = majority === 'down' ? up.length : down.length;
+    // Confirmé seulement si N appareils distincts sont d'accord ET qu'ils sont
+    // majoritaires. Les avis contraires font baisser la confiance.
+    const confirmed = win >= N_CONFIRM && win > lose;
+    confidence = confirmed
+      ? Math.min(100, 50 + win * 12 - lose * 8)
+      : Math.max(0, win * 15 - lose * 7);
   }
 
-  const win = majority === 'down' ? down.length : up.length;
-  const lose = majority === 'down' ? up.length : down.length;
-
-  // Confirmé seulement si N appareils distincts sont d'accord ET qu'ils sont
-  // majoritaires. Les avis contraires font baisser la confiance.
-  const confirmed = win >= N_CONFIRM && win > lose;
-  const confidence = confirmed
-    ? Math.min(100, 50 + win * 12 - lose * 8)
-    : Math.max(0, win * 15 - lose * 7);
-
-  const distinct = win;
+  // Pour un état « partagé », les deux camps attestent le partage : on compte
+  // donc tout le monde.
+  const distinct = majority === 'mixed' ? down.length + up.length : win;
   const lastTs = latest.reduce((m, v) => Math.max(m, new Date(v.created_at).getTime()), 0);
   const updated = new Date(lastTs).toISOString();
   const expires = new Date(lastTs + WINDOW_MIN * 60000).toISOString();
