@@ -191,19 +191,11 @@ function tally(st) {
     : { agree: st.n_up, disagree: st.n_down };
 }
 
-// Pourquoi ce n'est pas encore « confirmé » — dire à l'utilisateur ce qui manque
-// vaut mieux qu'un simple badge orange.
-function confirmHint(st) {
-  if (st.state === 'mixed') {
-    const manque = Math.max(3 - st.n_down, 3 - st.n_up);
-    return `Encore ${manque} signalement${manque > 1 ? 's' : ''} pour confirmer que la coupure ne touche qu'une partie de la zone.`;
-  }
-  const { agree } = tally(st);
-  const missing = 3 - agree;
-  if (missing > 0)
-    return `Encore ${missing} appareil${missing > 1 ? 's' : ''} d'accord pour confirmer.`;
-  return `Les signalements se contredisent — on attend d'y voir plus clair.`;
-}
+// Note : on n'affiche plus « encore N appareils pour confirmer ». Annoncer le
+// seuil qui reste à franchir revient à indiquer combien de votes il manque pour
+// faire basculer une zone — une invitation à aller les chercher. Le badge
+// « non confirmé » et les deux décomptes suffisent à dire ce qu'on sait ; le
+// seuil exact reste côté serveur, lisible via /api/states.
 
 // --- Bloc « Ma zone » (épinglé en haut) -----------------------------------
 
@@ -285,8 +277,7 @@ function drawMyZone() {
         ${badge}
         ${counts}
         <span>confiance ${st.confidence}%</span>
-      </div>
-      ${st.confirmed ? '' : `<div class="confirm-hint">${confirmHint(st)}</div>`}`;
+      </div>`;
   }
 
   let buttons = '';
@@ -480,7 +471,7 @@ function zoneBody(zone, st, isMine) {
           <span class="tally">${st.n_up}</span> ont du courant — autant des deux côtés.
           La coupure ne touche donc <strong>qu'une partie de la zone</strong> : selon ta rue,
           tu peux avoir de la lumière ou pas. · confiance ${st.confidence}%
-          ${st.confirmed ? '' : `<br>${confirmHint(st)}`}
+          ${st.confirmed ? '' : `<br><strong>Non confirmé.</strong>`}
         </div>`;
     } else {
       const { agree, disagree } = tally(st);
@@ -491,7 +482,7 @@ function zoneBody(zone, st, isMine) {
           ? `, <span class="tally against">${disagree}</span> dit${disagree > 1 ? 'ent' : ''} le contraire`
           : ''
       } · confiance ${st.confidence}%
-          ${st.confirmed ? '' : `<br><strong>Non confirmé.</strong> ${confirmHint(st)}`}
+          ${st.confirmed ? '' : `<br><strong>Non confirmé.</strong>`}
         </div>`;
     }
   }
