@@ -49,13 +49,20 @@ function expandGovOf(zoneId) {
 
 function loadAnchor() {
   try {
-    return JSON.parse(localStorage.getItem(ANCHOR_KEY) || 'null');
+    const a = JSON.parse(localStorage.getItem(ANCHOR_KEY) || 'null');
+    // Une ancre IP n'est qu'une supposition : on ne la ressort jamais du
+    // stockage, on la recalcule à chaque visite (sinon une personne qui se
+    // déplace resterait collée à l'ancienne région pendant des semaines).
+    return a && a.mode === 'ip' ? null : a;
   } catch {
     return null;
   }
 }
-function saveAnchor(a) {
+
+// persist=false pour les ancres IP : mémoire seulement, jamais sur le disque.
+function saveAnchor(a, { persist = true } = {}) {
   anchor = a;
+  if (!persist) return;
   try {
     if (a) localStorage.setItem(ANCHOR_KEY, JSON.stringify(a));
     else localStorage.removeItem(ANCHOR_KEY);
@@ -130,7 +137,7 @@ async function locateByIp() {
     if (!anchor) drawMyZone();
     return;
   }
-  saveAnchor({ mode: 'ip', zoneId: hit.zone_id, city: hit.city || null });
+  saveAnchor({ mode: 'ip', zoneId: hit.zone_id, city: hit.city || null }, { persist: false });
   expandGovOf(hit.zone_id);
   drawMyZone();
   drawList();
