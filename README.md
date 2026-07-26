@@ -37,11 +37,22 @@ Une pastille par zone, colorée : 🔴 coupé · 🟢 courant · 🟡 par endroi
 **les noms de zones apparaissent une fois zoomé**. Taper une zone ouvre sa fiche.
 Un champ **« Aller à une zone »** centre la carte sur la zone cherchée.
 
+Les **limites des gouvernorats** sont tracées en fond, avec leur nom. Ces noms
+**s'effacent en zoomant** (entre ×2,2 et ×4,5), au moment où ceux des zones
+prennent le relais : on passe du repérage général au détail local.
+
 > **Les noms qui se chevauchent sont masqués.** Aucun zoom ne suffit à les
 > séparer : nos centroïdes sont parfois distants de 556 m (les « Route de… » de
 > Sfax) voire 142 m (Médina et Hafsia à Tunis). On place donc les noms par ordre
 > d'importance — ta zone d'abord, puis les coupures — et on saute ceux qui
-> recouvriraient un nom déjà posé. La zone sélectionnée garde toujours le sien.
+> recouvriraient un nom déjà posé, ou qui seraient coupés par le bord. La zone
+> sélectionnée garde toujours le sien. Même arbitrage pour les gouvernorats, où
+> la priorité va aux plus étendus : le Grand Tunis en empile quatre minuscules.
+
+> **23 gouvernorats tracés, pas 24.** Natural Earth fusionne l'**Ariana** dans
+> Tunis ; ses 42 zones apparaissent donc à l'intérieur du polygone « Tunis ».
+> Faute de source libre les séparant, mieux vaut le dire que dessiner une limite
+> inventée.
 
 > **Pourquoi des pastilles et pas des zones remplies.** On ne connaît que le
 > centre *approximatif* de chaque zone, pas ses frontières. Remplir la carte de

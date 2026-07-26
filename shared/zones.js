@@ -176,11 +176,11 @@ export const ZONES = [
   { id: 'beja-thibar', name: 'Thibar', gov: 'Béja', lat: 36.52, lng: 9.08 },
   // — Bizerte —
   { id: 'bizerte-ain-mariem', name: 'Aïn Mariem', gov: 'Bizerte', lat: 37.255, lng: 9.855 },
-  { id: 'bizerte-bizerte-ville', name: 'Bizerte Ville', gov: 'Bizerte', lat: 37.274, lng: 9.873 },
+  { id: 'bizerte-bizerte-ville', name: 'Bizerte Ville', gov: 'Bizerte', lat: 37.2735, lng: 9.8571 },
   { id: 'bizerte-cap-zbib', name: 'Cap Zbib', gov: 'Bizerte', lat: 37.26, lng: 10.06 },
-  { id: 'bizerte-corniche-bizerte', name: 'Corniche Bizerte', gov: 'Bizerte', lat: 37.281, lng: 9.882 },
+  { id: 'bizerte-corniche-bizerte', name: 'Corniche Bizerte', gov: 'Bizerte', lat: 37.2802, lng: 9.8567 },
   { id: 'bizerte-el-alia', name: 'El Alia', gov: 'Bizerte', lat: 37.17, lng: 10.03 },
-  { id: 'bizerte-el-bhira', name: 'El Bhira', gov: 'Bizerte', lat: 37.19, lng: 9.87 },
+  { id: 'bizerte-el-bhira', name: 'El Bhira', gov: 'Bizerte', lat: 37.1642, lng: 9.9034 },
   { id: 'bizerte-errimel', name: 'Errimel', gov: 'Bizerte', lat: 37.23, lng: 9.87 },
   { id: 'bizerte-ghar-el-melh-utique', name: 'Ghar El Melh / Utique', gov: 'Bizerte', lat: 37.17, lng: 10.19 },
   { id: 'bizerte-jarzouna', name: 'Jarzouna', gov: 'Bizerte', lat: 37.255, lng: 9.9 },
@@ -204,7 +204,7 @@ export const ZONES = [
   // terres) étaient fusionnées en une seule zone dans la liste du concurrent.
   // Séparées : rien ne garantit qu'elles soient sur le même circuit, et une
   // fusion rend cette différence structurellement invisible (§4.1).
-  { id: 'gabes-ghannouch', name: 'Ghannouch', gov: 'Gabès', lat: 33.938, lng: 10.093 },
+  { id: 'gabes-ghannouch', name: 'Ghannouch', gov: 'Gabès', lat: 33.9302, lng: 10.0794 },
   { id: 'gabes-mareth', name: 'Mareth', gov: 'Gabès', lat: 33.63, lng: 10.28 },
   { id: 'gabes-matmata', name: 'Matmata', gov: 'Gabès', lat: 33.544, lng: 9.97 },
   { id: 'gabes-metouia', name: 'Métouia', gov: 'Gabès', lat: 33.967, lng: 10.0 },
@@ -269,7 +269,7 @@ export const ZONES = [
   { id: 'medenine-djerba-mellita', name: 'Djerba Mellita', gov: 'Médenine', lat: 33.87, lng: 10.775 },
   { id: 'medenine-djerba-mezraya', name: 'Djerba Mezraya', gov: 'Médenine', lat: 33.79, lng: 10.88 },
   { id: 'medenine-djerba-midoun', name: 'Djerba Midoun', gov: 'Médenine', lat: 33.808, lng: 10.995 },
-  { id: 'medenine-djerba-robbana', name: 'Djerba Robbana', gov: 'Médenine', lat: 33.85, lng: 11.01 },
+  { id: 'medenine-djerba-robbana', name: 'Djerba Robbana', gov: 'Médenine', lat: 33.834, lng: 10.999 },
   { id: 'medenine-djerba-sedouikech', name: 'Djerba Sedouikech', gov: 'Médenine', lat: 33.78, lng: 10.93 },
   // Zone hôtelière de la côte nord-est, entre Houmt Souk et Robbana.
   { id: 'medenine-djerba-sidi-mehrez', name: 'Djerba Sidi Mehrez (zone touristique)', gov: 'Médenine', lat: 33.865, lng: 10.955 },
@@ -293,7 +293,7 @@ export const ZONES = [
   { id: 'monastir-touza', name: 'Touza', gov: 'Monastir', lat: 35.66, lng: 10.87 },
   { id: 'monastir-zeramdine-ouerdanine', name: 'Zeramdine / Ouerdanine', gov: 'Monastir', lat: 35.59, lng: 10.72 },
   // — Nabeul —
-  { id: 'nabeul-azmour', name: 'Azmour', gov: 'Nabeul', lat: 36.4, lng: 10.7 },
+  { id: 'nabeul-azmour', name: 'Azmour', gov: 'Nabeul', lat: 36.4233, lng: 10.6835 },
   { id: 'nabeul-beni-khalled', name: 'Béni Khalled', gov: 'Nabeul', lat: 36.645, lng: 10.59 },
   { id: 'nabeul-bir-bouregba', name: 'Bir Bouregba', gov: 'Nabeul', lat: 36.42, lng: 10.56 },
   { id: 'nabeul-bir-challouf', name: 'Bir Challouf', gov: 'Nabeul', lat: 36.87, lng: 11.07 },

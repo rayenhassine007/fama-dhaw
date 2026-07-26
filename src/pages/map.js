@@ -11,7 +11,7 @@
 // pastille ne prétend rien d'autre que « par ici ».
 
 import { ZONES } from '../data/zones.js';
-import { TUNISIA_RINGS } from '../data/tunisia.js';
+import { TUNISIA_RINGS, GOVERNORATES } from '../data/tunisia.js';
 import { escapeHtml, timeAgo, normalizeText } from '../lib/ui.js';
 import { fetchHistory, renderHistoryBar } from '../lib/history.js';
 
@@ -29,8 +29,13 @@ const MIN_SCALE = 1;
 // l'ancien plafond de ×14, un pixel valait ~90 m et ces zones étaient
 // indiscernables.
 const MAX_SCALE = 140;
-// En dessous de ce zoom, aucun nom : ils se chevaucheraient tous.
+// En dessous de ce zoom, aucun nom de zone : ils se chevaucheraient tous.
 const LABEL_SCALE = 3.2;
+// Les noms de gouvernorats servent à se repérer quand on voit le pays en entier.
+// Ils s'effacent en zoomant, au moment où les noms de zones prennent le relais —
+// afficher les deux ensemble ne ferait qu'encombrer.
+const GOV_FADE_START = 2.2; // début de l'effacement
+const GOV_FADE_END = 4.5; // totalement invisibles au-delà
 
 // Projection équirectangulaire, corrigée en longitude. Suffisant à l'échelle
 // d'un pays, et c'est déjà l'approximation utilisée pour les distances.
@@ -207,9 +212,21 @@ function cls(zoneId) {
 function drawShapes() {
   const g = root.querySelector('#map-g');
 
-  const paths = TUNISIA_RINGS.map((ring) => {
-    const d = ring.map(([lng, lat], i) => (i ? 'L' : 'M') + project(lat, lng).map((n) => n.toFixed(1)).join(' ')).join(' ') + ' Z';
-    return `<path class="map-land" d="${d}" />`;
+  const toPath = (ring) =>
+    ring
+      .map(([lng, lat], i) => (i ? 'L' : 'M') + project(lat, lng).map((n) => n.toFixed(1)).join(' '))
+      .join(' ') + ' Z';
+
+  const paths = TUNISIA_RINGS.map((r) => `<path class="map-land" d="${toPath(r)}" />`).join('');
+
+  // Limites administratives, dessinées par-dessus la terre et sous les zones.
+  const govShapes = GOVERNORATES.map(
+    (g) => `<path class="map-gov" d="${g.rings.map(toPath).join(' ')}" />`
+  ).join('');
+
+  const govLabels = GOVERNORATES.map((g) => {
+    const [x, y] = project(g.lat, g.lng);
+    return `<text class="gov-label" data-gov="${escapeHtml(g.name)}" x="${x.toFixed(1)}" y="${y.toFixed(1)}">${escapeHtml(g.name)}</text>`;
   }).join('');
 
   // Les zones les plus « chaudes » sont dessinées en dernier pour rester
@@ -229,7 +246,10 @@ function drawShapes() {
     })
     .join('');
 
-  g.innerHTML = paths + dots;
+  // Ordre de peinture : terre, limites, pastilles, puis les noms de
+  // gouvernorats EN DERNIER. Dessinés avant, les pastilles leur passaient
+  // dessus et hachaient les lettres — « BIZERTE » se lisait « BIZE ».
+  g.innerHTML = `${paths}${govShapes}${dots}<g id="gov-labels">${govLabels}</g>`;
 }
 
 // Unités du viewBox par pixel écran. Sans ce facteur, une taille exprimée en
@@ -269,6 +289,52 @@ const LABEL_PRIORITY = { mine: 0, down: 1, mixed: 2, up: 3, unknown: 4 };
 // à peine, et les étiquettes s'empilent en un bloc illisible. On place donc les
 // noms du plus important au moins important, et on saute ceux qui recouvriraient
 // un nom déjà posé.
+// Étendue approximative de chaque gouvernorat, en degrés². Sert à décider qui
+// garde son nom quand ça se bouscule : le Grand Tunis empile quatre
+// gouvernorats minuscules, tous ne peuvent pas être écrits.
+const GOV_AREA = new Map(
+  GOVERNORATES.map((g) => {
+    let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+    for (const r of g.rings)
+      for (const [lng, lat] of r) {
+        if (lat < minLat) minLat = lat;
+        if (lat > maxLat) maxLat = lat;
+        if (lng < minLng) minLng = lng;
+        if (lng > maxLng) maxLng = lng;
+      }
+    return [g.name, (maxLat - minLat) * (maxLng - minLng)];
+  })
+);
+
+// Même arbitrage que pour les zones, appliqué aux noms de gouvernorats.
+function layoutGovLabels() {
+  const cands = [];
+  for (const g of GOVERNORATES) {
+    const [px, py] = project(g.lat, g.lng);
+    const [sx, sy] = toScreen(px, py);
+    const el = root.querySelector(`[data-gov="${g.name}"]`);
+    if (!el) continue;
+    if (sx < 0 || sy < 0 || sx > viewW || sy > viewH) {
+      el.style.display = 'none';
+      continue;
+    }
+    cands.push({ g, el, sx, sy });
+  }
+  cands.sort((a, b) => (GOV_AREA.get(b.g.name) || 0) - (GOV_AREA.get(a.g.name) || 0));
+
+  const placed = [];
+  for (const c of cands) {
+    const w = c.g.name.length * 8.5 + 8; // majuscules espacées : plus large
+    const box = { l: c.sx - w / 2, r: c.sx + w / 2, t: c.sy - 9, b: c.sy + 9 };
+    // Un nom coupé par le bord est pire qu'un nom absent — on teste la largeur
+    // du texte, pas seulement son point d'ancrage.
+    const dehors = box.l < 2 || box.r > viewW - 2 || box.t < 2 || box.b > viewH - 2;
+    const hit = dehors || placed.some((q) => box.l < q.r && box.r > q.l && box.t < q.b && box.b > q.t);
+    c.el.style.display = hit ? 'none' : '';
+    if (!hit) placed.push(box);
+  }
+}
+
 function layoutLabels() {
   const wrap = root && root.querySelector('.map-wrap');
   if (!wrap) return;
@@ -302,7 +368,8 @@ function layoutLabels() {
     const w = c.z.name.length * 6.2 + 6;
     const h = 15;
     const box = { l: c.sx - w / 2, r: c.sx + w / 2, t: c.sy - 22, b: c.sy - 22 + h };
-    const hit = placed.some((q) => box.l < q.r && box.r > q.l && box.t < q.b && box.b > q.t);
+    const dehors = box.l < 2 || box.r > viewW - 2 || box.t < 2 || box.b > viewH - 2;
+    const hit = dehors || placed.some((q) => box.l < q.r && box.r > q.l && box.t < q.b && box.b > q.t);
     el.style.display = hit ? 'none' : '';
     if (!hit) placed.push(box);
   }
@@ -316,6 +383,17 @@ function applyView() {
   // Pastilles et textes gardent une taille constante à l'écran : on annule à la
   // fois le zoom du groupe (1/scale) et le facteur viewBox→écran.
   g.style.setProperty('--k', String(unitsPerPx / view.scale));
+
+  // Les noms de gouvernorats s'effacent progressivement pendant que ceux des
+  // zones apparaissent : on passe du repérage général au détail local.
+  const gl = root.querySelector('#gov-labels');
+  if (gl) {
+    const t = (view.scale - GOV_FADE_START) / (GOV_FADE_END - GOV_FADE_START);
+    const op = Math.max(0, Math.min(1, 1 - t));
+    gl.style.opacity = String(op);
+    if (op > 0) layoutGovLabels();
+  }
+
   layoutLabels();
   const hint = root.querySelector('#map-hint');
   if (hint) hint.style.opacity = view.scale > 1.2 ? '0' : '';

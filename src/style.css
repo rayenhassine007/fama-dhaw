@@ -283,6 +283,33 @@ body {
   vector-effect: non-scaling-stroke;
 }
 
+/* Limites de gouvernorats : un repère, pas une information. Trait fin et
+ * discret, pour ne pas concurrencer les pastilles d'état. */
+.map-gov {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.16);
+  stroke-width: 1;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+#gov-labels {
+  pointer-events: none;
+  transition: opacity var(--med);
+}
+.gov-label {
+  font-size: calc(13px * var(--k, 1));
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  fill: rgba(200, 214, 232, 0.75);
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: rgba(9, 12, 17, 0.85);
+  stroke-width: calc(3.5px * var(--k, 1));
+  stroke-linejoin: round;
+}
+
 /* Pastilles de zone. --k = 1/échelle : garde une taille constante à l'écran,
  * sinon elles enflent en zoomant et disparaissent en dézoomant. */
 .zdot {
