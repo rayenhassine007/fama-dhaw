@@ -27,10 +27,10 @@ donc on ne peut signaler que là où l'on se trouve physiquement.
 ### La carte (onglet secondaire)
 
 Carte de la Tunisie **en SVG pur** : aucune tuile, aucune librairie, aucune clé
-de service. Le contour du pays (Natural Earth 1:50m, domaine public) est embarqué
-en dur — 3 ko — parce que la carte doit s'afficher **pendant** une coupure, quand
-le réseau est saturé (§2.5). Le module entier ne pèse que ~4 ko gzip et n'est
-chargé qu'au premier clic sur l'onglet.
+de service. Le trait de côte (Natural Earth **1:10m**, domaine public) et les
+limites administratives sont embarqués en dur, parce que la carte doit s'afficher
+**pendant** une coupure, quand le réseau est saturé (§2.5). Le module pèse ~11 ko
+gzip et n'est chargé qu'au premier clic sur l'onglet, donc l'accueil reste léger.
 
 Une pastille par zone, colorée : 🔴 coupé · 🟢 courant · 🟡 par endroits ·
 ⚫ pas d'info. Glisser pour se déplacer, pincer ou double-taper pour zoomer, et
