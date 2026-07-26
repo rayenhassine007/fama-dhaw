@@ -11,7 +11,7 @@ donc on ne peut signaler que là où l'on se trouve physiquement.
 
 ## Ce qui est fait (V1 — front)
 
-- **Une seule page** : « Ma zone » épinglée en haut, puis **les 375 zones du pays**
+- **Une seule page** : « Ma zone » épinglée en haut, puis **les 377 zones du pays**
   groupées par gouvernorat, chacune avec sa pastille d'état, ses compteurs
   (coupé / courant), sa fraîcheur. Aucune recherche nécessaire pour voir le reste
   du pays — la recherche (accent-insensible) ne fait que **filtrer**.
@@ -91,18 +91,27 @@ vrai point GPS (≤ 120 m). Et on ne rejette plus jamais sèchement :
 | > 2 km | l'utilisateur **choisit** sa zone parmi les candidates plausibles |
 | refus / aucun point | message clair, la liste reste entièrement consultable |
 
+S'y ajoute `isAmbiguous()` : quand deux zones sont à distance quasi égale, on
+demande **même avec un point parfait**. Nos centroïdes étant approximatifs, la
+frontière peut tomber en plein milieu d'une ville — c'est exactement ce qui
+envoyait quelqu'un d'Oudhref sur Métouia.
+
 **Ça n'ouvre pas la porte à la triche.** Quand l'utilisateur désambiguïse à la
-main, le client joint son `zone_id`, mais le serveur ne l'accepte que si cette
-zone tombe dans le **rayon d'incertitude du GPS envoyé** (`zonesNear` +
-`candidateRadiusKm`, calculés à l'identique des deux côtés). Un point à ± 40 m
-n'ouvre que les 2 zones limitrophes ; une zone à 1,3 km est refusée ; Sousse
-depuis Tunis est refusée. Le principe §8 tient : **la zone reste dérivée du GPS
-côté serveur**, on autorise seulement l'humain à trancher *à l'intérieur de sa
-propre marge d'erreur*.
+main, le client joint son `zone_id`, mais le serveur ne l'accepte que s'il figure
+dans `acceptableZones(lat, lng, accuracy)` — la même fonction des deux côtés. Son
+rayon cumule les trois incertitudes réelles : distance à la zone la plus proche,
+précision GPS, et imprécision de nos propres centroïdes (celle-ci proportionnelle
+à la densité locale, bornée à 0,4–3,5 km). Depuis Tunis centre avec un bon point,
+**3 zones** seulement sont acceptables ; Sousse, Sfax et l'Ariana sont refusées.
+
+Mesuré sur les 377 zones, en décalant le point dans 8 directions : la vraie zone
+reste proposée dans **100 %** des cas à ± 40 m et ± 1 km, **98,5 %** à ± 2 km. Le
+principe §8 tient — **la zone reste dérivée du GPS côté serveur**, on autorise
+seulement l'humain à trancher *à l'intérieur de sa propre marge d'erreur*.
 
 ### Le modèle « zones »
 
-Zones = **la liste nationale complète du concurrent** (~375 zones, tous les
+Zones = **la liste nationale complète du concurrent** (377 zones, tous les
 gouvernorats), transcrites depuis leur app, chacune définie par un **centroïde
 nommé** ([`shared/zones.js`](./shared/zones.js)). Une position GPS appartient à
 la zone dont le centre est le plus proche (partition de Voronoï). Léger, aucun

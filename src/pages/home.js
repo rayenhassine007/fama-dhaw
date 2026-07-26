@@ -122,7 +122,7 @@ export function renderHome(container) {
     startAddZone();
   });
 
-  // Une seule délégation d'événements pour ~375 lignes.
+  // Une seule délégation d'événements pour ~377 lignes.
   root.querySelector('#zone-list').addEventListener('click', onListClick);
   root.querySelector('#my-zone').addEventListener('click', onMyZoneClick);
 

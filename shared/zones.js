@@ -51,7 +51,7 @@ export const ZONES = [
   { id: 'tunis-el-omrane', name: 'El Omrane', gov: 'Tunis', lat: 36.818, lng: 10.156 },
   { id: 'tunis-el-omrane-superieur', name: 'El Omrane Supérieur', gov: 'Tunis', lat: 36.829, lng: 10.149 },
   { id: 'tunis-el-ouardia-kabaria', name: 'El Ouardia / Kabaria', gov: 'Tunis', lat: 36.762, lng: 10.185 },
-  { id: 'tunis-essaida', name: 'Essaïda', gov: 'Tunis', lat: 36.79, lng: 10.235 },
+  { id: 'tunis-essaida', name: 'Essaidia', gov: 'Tunis', lat: 36.79, lng: 10.235 },
   { id: 'tunis-ezzahrouni', name: 'Ezzahrouni', gov: 'Tunis', lat: 36.808, lng: 10.15 },
   { id: 'tunis-gammarth', name: 'Gammarth', gov: 'Tunis', lat: 36.905, lng: 10.29 },
   { id: 'tunis-gammarth-superieur', name: 'Gammarth Supérieur', gov: 'Tunis', lat: 36.91, lng: 10.285 },
@@ -209,7 +209,7 @@ export const ZONES = [
   { id: 'gabes-matmata', name: 'Matmata', gov: 'Gabès', lat: 33.544, lng: 9.97 },
   { id: 'gabes-metouia', name: 'Métouia', gov: 'Gabès', lat: 33.967, lng: 10.0 },
   { id: 'gabes-oudhref', name: 'Oudhref', gov: 'Gabès', lat: 33.925, lng: 10.02 },
-  { id: 'gabes-tebelbou', name: 'Tebelbou', gov: 'Gabès', lat: 33.87, lng: 9.85 },
+  { id: 'gabes-tebelbou', name: 'Tbelbou', gov: 'Gabès', lat: 33.87, lng: 9.85 },
   { id: 'gabes-zrig', name: 'Zrig', gov: 'Gabès', lat: 33.872, lng: 10.082 },
   // — Gafsa —
   { id: 'gafsa-el-guettar', name: 'El Guettar', gov: 'Gafsa', lat: 34.34, lng: 8.94 },
@@ -271,6 +271,8 @@ export const ZONES = [
   { id: 'medenine-djerba-midoun', name: 'Djerba Midoun', gov: 'Médenine', lat: 33.808, lng: 10.995 },
   { id: 'medenine-djerba-robbana', name: 'Djerba Robbana', gov: 'Médenine', lat: 33.85, lng: 11.01 },
   { id: 'medenine-djerba-sedouikech', name: 'Djerba Sedouikech', gov: 'Médenine', lat: 33.78, lng: 10.93 },
+  // Zone hôtelière de la côte nord-est, entre Houmt Souk et Robbana.
+  { id: 'medenine-djerba-sidi-mehrez', name: 'Djerba Sidi Mehrez (zone touristique)', gov: 'Médenine', lat: 33.865, lng: 10.955 },
   { id: 'medenine-medenine-ville', name: 'Médenine Ville', gov: 'Médenine', lat: 33.354, lng: 10.505 },
   { id: 'medenine-zarzis', name: 'Zarzis', gov: 'Médenine', lat: 33.504, lng: 11.112 },
   // — Monastir —
@@ -307,7 +309,7 @@ export const ZONES = [
   { id: 'nabeul-hammamet-yasmine', name: 'Hammamet / Yasmine', gov: 'Nabeul', lat: 36.38, lng: 10.54 },
   { id: 'nabeul-hammamet-nord', name: 'Hammamet Nord', gov: 'Nabeul', lat: 36.41, lng: 10.61 },
   { id: 'nabeul-kelibia', name: 'Kélibia', gov: 'Nabeul', lat: 36.847, lng: 11.094 },
-  { id: 'nabeul-kerkes', name: 'Kerkes', gov: 'Nabeul', lat: 36.9, lng: 10.95 },
+  { id: 'nabeul-kerkes', name: 'Kerker', gov: 'Nabeul', lat: 36.9, lng: 10.95 },
   { id: 'nabeul-kerkouane', name: 'Kerkouane', gov: 'Nabeul', lat: 36.947, lng: 11.1 },
   { id: 'nabeul-korba', name: 'Korba', gov: 'Nabeul', lat: 36.573, lng: 10.857 },
   { id: 'nabeul-maamoura', name: 'Maâmoura', gov: 'Nabeul', lat: 36.52, lng: 10.8 },

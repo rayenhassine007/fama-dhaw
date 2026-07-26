@@ -61,7 +61,7 @@ function frame(minLat, maxLat, minLng, maxLng, maxScale = MAX_SCALE) {
 
 // Vue de départ. Le contour complet du pays reste dessiné — on peut dézoomer
 // pour le voir en entier — mais on ne DÉMARRE pas sur la pointe saharienne, qui
-// ne contient que deux zones sur 376 et occupe un quart de la hauteur.
+// ne contient que deux zones sur 377 et occupe un quart de la hauteur.
 function computeHome() {
   const mine = myZoneId && ZONES.find((z) => z.id === myZoneId);
   if (mine) {
