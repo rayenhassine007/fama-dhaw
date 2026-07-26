@@ -35,6 +35,13 @@ chargé qu'au premier clic sur l'onglet.
 Une pastille par zone, colorée : 🔴 coupé · 🟢 courant · 🟡 par endroits ·
 ⚫ pas d'info. Glisser pour se déplacer, pincer ou double-taper pour zoomer, et
 **les noms de zones apparaissent une fois zoomé**. Taper une zone ouvre sa fiche.
+Un champ **« Aller à une zone »** centre la carte sur la zone cherchée.
+
+> **Les noms qui se chevauchent sont masqués.** Aucun zoom ne suffit à les
+> séparer : nos centroïdes sont parfois distants de 556 m (les « Route de… » de
+> Sfax) voire 142 m (Médina et Hafsia à Tunis). On place donc les noms par ordre
+> d'importance — ta zone d'abord, puis les coupures — et on saute ceux qui
+> recouvriraient un nom déjà posé. La zone sélectionnée garde toujours le sien.
 
 > **Pourquoi des pastilles et pas des zones remplies.** On ne connaît que le
 > centre *approximatif* de chaque zone, pas ses frontières. Remplir la carte de

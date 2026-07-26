@@ -12,7 +12,7 @@
 
 import { ZONES } from '../data/zones.js';
 import { TUNISIA_RINGS } from '../data/tunisia.js';
-import { escapeHtml, timeAgo } from '../lib/ui.js';
+import { escapeHtml, timeAgo, normalizeText } from '../lib/ui.js';
 import { fetchHistory, renderHistoryBar } from '../lib/history.js';
 
 // Cadrage géographique, avec une marge autour du pays.
@@ -24,9 +24,12 @@ const H = Math.round(
 );
 
 const MIN_SCALE = 1;
-const MAX_SCALE = 14;
-// Au-delà de ce zoom, les noms de zones apparaissent : en dessous ils se
-// chevaucheraient et rendraient la carte illisible.
+// Zoom max élevé, parce que les centroïdes sont parfois très serrés : 556 m
+// entre deux « Route de… » à Sfax, 142 m entre Médina et Hafsia à Tunis. À
+// l'ancien plafond de ×14, un pixel valait ~90 m et ces zones étaient
+// indiscernables.
+const MAX_SCALE = 140;
+// En dessous de ce zoom, aucun nom : ils se chevaucheraient tous.
 const LABEL_SCALE = 3.2;
 
 // Projection équirectangulaire, corrigée en longitude. Suffisant à l'échelle
@@ -87,6 +90,12 @@ export function renderMap(container, { states: st, myZoneId: mine } = {}) {
   myZoneId = mine || null;
 
   root.innerHTML = `
+    <div class="map-search">
+      <input id="map-q" class="zone-search-input" type="search"
+             placeholder="🔍 Aller à une zone..." autocomplete="off" />
+      <div id="map-results" class="map-results"></div>
+    </div>
+
     <div class="map-legend">
       <span class="lg"><i class="lg-dot down"></i>Coupé</span>
       <span class="lg"><i class="lg-dot up"></i>Y a du courant</span>
@@ -116,6 +125,64 @@ export function renderMap(container, { states: st, myZoneId: mine } = {}) {
   clamp();
   applyView();
   bindGestures();
+  bindSearch();
+  drawInfo();
+}
+
+// Recherche : taper un nom, la carte y va directement.
+function bindSearch() {
+  const input = root.querySelector('#map-q');
+  const box = root.querySelector('#map-results');
+
+  const close = () => {
+    box.innerHTML = '';
+  };
+
+  input.addEventListener('input', () => {
+    const q = normalizeText(input.value);
+    if (q.length < 1) return close();
+    const hits = ZONES.filter((z) => normalizeText(z.name).includes(q)).slice(0, 8);
+    if (hits.length === 0) {
+      box.innerHTML = `<div class="map-result-empty">Aucune zone à ce nom.</div>`;
+      return;
+    }
+    box.innerHTML = hits
+      .map(
+        (z) => `<button class="map-result" data-goto="${z.id}">
+            <i class="lg-dot ${cls(z.id)}"></i>
+            <span class="map-result-name">${escapeHtml(z.name)}</span>
+            <span class="map-result-gov">${escapeHtml(z.gov)}</span>
+          </button>`
+      )
+      .join('');
+  });
+
+  box.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-goto]');
+    if (!b) return;
+    goToZone(b.dataset.goto);
+    input.value = '';
+    input.blur();
+    close();
+  });
+}
+
+// Centre la carte sur une zone, assez zoomé pour lire les noms alentour.
+function goToZone(zoneId) {
+  const z = ZONES.find((x) => x.id === zoneId);
+  if (!z) return;
+  const d = 0.035; // ~4 km autour du point
+  view = frame(z.lat - d, z.lat + d, z.lng - d, z.lng + d, 40);
+  clamp();
+  applyView();
+
+  selectedId = zoneId;
+  root.querySelectorAll('.zdot.sel').forEach((el) => el.classList.remove('sel'));
+  const dot = root.querySelector(`[data-zone="${zoneId}"]`);
+  if (dot) dot.classList.add('sel');
+  // Le nom de la zone visée reste affiché, même si un voisin l'aurait masqué.
+  const lab = root.querySelector(`[data-label="${zoneId}"]`);
+  if (lab) lab.style.display = '';
   drawInfo();
 }
 
@@ -157,7 +224,7 @@ function drawShapes() {
       return `<g class="zg" data-zone-g="${z.id}">
           <circle class="zdot ${cls(z.id)}${mine}" data-zone="${z.id}"
                   cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="6" />
-          <text class="zlabel" x="${x.toFixed(1)}" y="${y.toFixed(1)}">${escapeHtml(z.name)}</text>
+          <text class="zlabel" data-label="${z.id}" x="${x.toFixed(1)}" y="${y.toFixed(1)}">${escapeHtml(z.name)}</text>
         </g>`;
     })
     .join('');
@@ -169,12 +236,76 @@ function drawShapes() {
 // unités viewBox donne n'importe quoi à l'écran : le SVG fait 1000 unités de
 // large pour ~330 px réels, donc un texte de 11 unités s'affiche à 3 px.
 let unitsPerPx = 1;
+let offX = 0; // marges de centrage du preserveAspectRatio="meet"
+let offY = 0;
+let viewW = 0;
+let viewH = 0;
 
 function measure() {
   const svg = root && root.querySelector('#map-svg');
   if (!svg) return;
   const r = svg.getBoundingClientRect();
-  if (r.width && r.height) unitsPerPx = 1 / Math.min(r.width / W, r.height / H);
+  if (!r.width || !r.height) return;
+  const s = Math.min(r.width / W, r.height / H);
+  unitsPerPx = 1 / s;
+  offX = (r.width - W * s) / 2;
+  offY = (r.height - H * s) / 2;
+  viewW = r.width;
+  viewH = r.height;
+}
+
+// Position à l'écran (en px, relative au SVG) d'un point du contenu.
+function toScreen(x, y) {
+  return [(view.x + x * view.scale) / unitsPerPx + offX, (view.y + y * view.scale) / unitsPerPx + offY];
+}
+
+// Priorité d'affichage d'un nom quand ça se bouscule : d'abord ma zone, puis
+// ce qui est le plus important à voir.
+const LABEL_PRIORITY = { mine: 0, down: 1, mixed: 2, up: 3, unknown: 4 };
+
+// Masque les noms qui se chevaucheraient.
+//
+// Sans ça, aucun zoom ne suffit : nos centroïdes sont parfois distants de 150 m
+// à peine, et les étiquettes s'empilent en un bloc illisible. On place donc les
+// noms du plus important au moins important, et on saute ceux qui recouvriraient
+// un nom déjà posé.
+function layoutLabels() {
+  const wrap = root && root.querySelector('.map-wrap');
+  if (!wrap) return;
+  const show = view.scale >= LABEL_SCALE;
+  wrap.classList.toggle('show-labels', show);
+  if (!show) return;
+
+  const margin = 40; // on traite aussi ce qui déborde un peu, pour éviter les sauts
+  const candidates = [];
+  for (const z of ZONES) {
+    const [px, py] = project(z.lat, z.lng);
+    const [sx, sy] = toScreen(px, py);
+    if (sx < -margin || sy < -margin || sx > viewW + margin || sy > viewH + margin) {
+      const el = root.querySelector(`[data-label="${z.id}"]`);
+      if (el) el.style.display = 'none';
+      continue;
+    }
+    // La zone sélectionnée garde son nom quoi qu'il arrive : c'est celle que
+    // l'utilisateur vient de chercher ou de taper, la masquer serait absurde.
+    const p =
+      z.id === selectedId ? -1 : (LABEL_PRIORITY[z.id === myZoneId ? 'mine' : cls(z.id)] ?? 4);
+    candidates.push({ z, sx, sy, p });
+  }
+  candidates.sort((a, b) => a.p - b.p);
+
+  const placed = [];
+  for (const c of candidates) {
+    const el = root.querySelector(`[data-label="${c.z.id}"]`);
+    if (!el) continue;
+    // Largeur estimée : mesurer chaque texte coûterait un reflow par image.
+    const w = c.z.name.length * 6.2 + 6;
+    const h = 15;
+    const box = { l: c.sx - w / 2, r: c.sx + w / 2, t: c.sy - 22, b: c.sy - 22 + h };
+    const hit = placed.some((q) => box.l < q.r && box.r > q.l && box.t < q.b && box.b > q.t);
+    el.style.display = hit ? 'none' : '';
+    if (!hit) placed.push(box);
+  }
 }
 
 function applyView() {
@@ -185,7 +316,7 @@ function applyView() {
   // Pastilles et textes gardent une taille constante à l'écran : on annule à la
   // fois le zoom du groupe (1/scale) et le facteur viewBox→écran.
   g.style.setProperty('--k', String(unitsPerPx / view.scale));
-  root.querySelector('.map-wrap').classList.toggle('show-labels', view.scale >= LABEL_SCALE);
+  layoutLabels();
   const hint = root.querySelector('#map-hint');
   if (hint) hint.style.opacity = view.scale > 1.2 ? '0' : '';
 }
