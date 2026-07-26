@@ -455,15 +455,24 @@ function bindGestures() {
   const pts = new Map();
   let start = null;
 
+  // Ancre de glissement : position du doigt ET translation courante, prises au
+  // même instant. Les deux doivent toujours dater du même moment, sinon le
+  // déplacement calculé est faux.
+  const ancre = (ev, moved = false) => {
+    const [px, py] = toViewBox(ev);
+    return { px, py, vx: view.x, vy: view.y, moved };
+  };
+
   svg.addEventListener('pointerdown', (e) => {
     svg.setPointerCapture(e.pointerId);
     pts.set(e.pointerId, e);
     if (pts.size === 1) {
-      const [px, py] = toViewBox(e);
-      start = { px, py, vx: view.x, vy: view.y, moved: false, t: Date.now() };
+      start = ancre(e);
     } else if (pts.size === 2) {
       const [a, b] = [...pts.values()];
       gesture = { dist: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY), scale: view.scale };
+      // L'ancre du premier doigt devient caduque dès que le zoom bouge.
+      start = null;
     }
   });
 
@@ -500,8 +509,22 @@ function bindGestures() {
   const end = (e) => {
     pts.delete(e.pointerId);
     if (pts.size < 2) gesture = null;
-    if (pts.size === 0 && start && !start.moved) selectAt(e);
-    if (pts.size === 0) start = null;
+
+    if (pts.size === 1) {
+      // C'ÉTAIT LE BUG DU SAUT AU ZOOM. En levant un doigt après un pincement,
+      // le doigt restant reprenait l'ancre du tout premier contact : une
+      // position et une translation d'AVANT le zoom. Le déplacement calculé
+      // était alors énorme et la carte sautait ailleurs d'un coup.
+      // On réancre donc sur le doigt qui reste, à l'instant présent. `moved`
+      // est vrai : un pincement n'est pas un tap, il ne doit rien sélectionner.
+      start = ancre([...pts.values()][0], true);
+      return;
+    }
+
+    if (pts.size === 0) {
+      if (start && !start.moved) selectAt(e);
+      start = null;
+    }
   };
   svg.addEventListener('pointerup', end);
   svg.addEventListener('pointercancel', end);

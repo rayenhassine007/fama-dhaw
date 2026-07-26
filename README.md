@@ -49,10 +49,10 @@ prennent le relais : on passe du repérage général au détail local.
 > sélectionnée garde toujours le sien. Même arbitrage pour les gouvernorats, où
 > la priorité va aux plus étendus : le Grand Tunis en empile quatre minuscules.
 
-> **23 gouvernorats tracés, pas 24.** Natural Earth fusionne l'**Ariana** dans
-> Tunis ; ses 42 zones apparaissent donc à l'intérieur du polygone « Tunis ».
-> Faute de source libre les séparant, mieux vaut le dire que dessiner une limite
-> inventée.
+Les **24 gouvernorats** sont tracés, Ariana comprise. Natural Earth la fusionnait
+dans Tunis ; les limites viennent donc de **geoBoundaries gbOpen** (CC BY 4.0),
+qui les distingue. Ceux du Grand Tunis sont petits, donc moins simplifiés que les
+autres — sinon leurs contours se réduisaient à un triangle.
 
 > **Pourquoi des pastilles et pas des zones remplies.** On ne connaît que le
 > centre *approximatif* de chaque zone, pas ses frontières. Remplir la carte de
