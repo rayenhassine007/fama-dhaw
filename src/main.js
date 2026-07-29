@@ -1,6 +1,7 @@
 import './style.css';
 import { renderHome, onStates, currentStates } from './pages/home.js';
 import { USE_API } from './lib/api.js';
+import { inject } from '@vercel/analytics';
 
 const app = document.querySelector('#app');
 
@@ -65,3 +66,6 @@ async function show(next) {
 }
 
 shell();
+
+// Initialize Vercel Web Analytics
+inject();
